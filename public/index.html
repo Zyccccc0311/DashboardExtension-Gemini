@@ -472,6 +472,17 @@
             return String(value);
         }
 
+        function collectHeaders(rows) {
+            if (!Array.isArray(rows) || rows.length === 0) return [];
+            const headers = [];
+            rows.forEach((row) => {
+                Object.keys(row || {}).forEach((key) => {
+                    if (!headers.includes(key)) headers.push(key);
+                });
+            });
+            return headers;
+        }
+
         function extractLegacyPayload(responseText) {
             const rawText = String(responseText || '');
             const dataMatch = rawText.match(/\[DATA\]([\s\S]*?)\[\/DATA\]/i);
@@ -499,7 +510,7 @@
 
         function generateHTMLTable(data) {
             if (!Array.isArray(data) || data.length === 0) return '';
-            const headers = Object.keys(data[0]);
+            const headers = collectHeaders(data);
             return `
                 <div class="table-shell">
                     <div class="table-meta">
@@ -735,7 +746,7 @@
 
         downloadBtn.addEventListener('click', () => {
             if (!currentTableData.length) return;
-            const headers = Object.keys(currentTableData[0]);
+            const headers = collectHeaders(currentTableData);
             const lines = [
                 headers.join(','),
                 ...currentTableData.map((row) =>

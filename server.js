@@ -9,6 +9,8 @@ import { fileURLToPath } from 'url';
 import { platform } from 'os';
 import { normalizeQueryDatasourceCall } from './vdsQuery.js';
 import { buildVdsQueryFromDsl, collectDslDiagnostics, createEmptyDsl } from './queryDsl.js';
+import { extractQuerySlots } from './querySlots.js';
+import { getResolvedFieldCaption, resolveFieldRoles } from './queryRoles.js';
 
 // 1. 基础配置
 dotenv.config();
@@ -492,12 +494,37 @@ async function getDatasourceMetadata(datasourceLuid) {
     return parsedResponse || {};
 }
 
+async function runSingleDslQuery(datasourceLuid, dsl) {
+    const query = buildVdsQueryFromDsl(dsl);
+    const call = {
+        name: 'query-datasource',
+        args: {
+            datasourceLuid,
+            query
+        }
+    };
+    const { mcpResult, parsedResponse } = await executeMcpCall(call);
+    return { call, mcpResult, parsedResponse };
+}
+
 async function runDeterministicDslQuery(prompt, datasourceLuid) {
-    const parsed = parseDeterministicPromptV2(prompt);
+    const slots = extractQuerySlots(prompt);
+    const parsed = slots ? {
+        intent: slots.intent,
+        year: slots.timeScope?.year || null,
+        groupLabel: slots.groupBy || null,
+        metricLabel: slots.metric || null,
+        member: slots.memberFilters?.[0]?.value || null,
+        topDirection: slots.ranking?.direction || null,
+        topN: slots.ranking?.count || null,
+        entityLabel: slots.entity || null,
+        _source: 'slots'
+    } : parseDeterministicPromptV2(prompt);
     if (!parsed) {
         console.log('deterministic DSL: prompt not matched');
         return null;
     }
+    console.log(`deterministic DSL: parsed via ${parsed._source || 'legacy-parser'} intent=${parsed.intent}`);
 
     const metadataPayload = await getDatasourceMetadata(datasourceLuid);
     const metadataRecords = extractMetadataRecords(metadataPayload);
@@ -507,8 +534,14 @@ async function runDeterministicDslQuery(prompt, datasourceLuid) {
         return null;
     }
 
-    const orderDateField = findFieldByCandidates(metadataRecords, ['Order Date', '日期', 'Date']);
-    const metricField = resolveMetricFieldV2(metadataRecords, parsed.metricLabel);
+    const resolvedRoles = resolveFieldRoles(metadataRecords, {
+        metric: parsed.metricLabel,
+        groupBy: parsed.groupLabel,
+        entity: parsed.entityLabel,
+        memberFilters: parsed.member ? [{ value: parsed.member }] : []
+    });
+    const orderDateField = resolvedRoles.timeField;
+    const metricField = resolvedRoles.metricField;
     if (!orderDateField || !metricField) {
         console.log(`deterministic DSL: failed field resolution orderDate=${!!orderDateField} metric=${!!metricField}`);
         return null;
@@ -520,61 +553,61 @@ async function runDeterministicDslQuery(prompt, datasourceLuid) {
     }
 
     if (parsed.intent === 'group_metric_by_year') {
-        const groupField = resolveGroupingField(metadataRecords, parsed.groupLabel);
+        const groupField = resolvedRoles.groupField;
         if (!groupField) {
             console.log('deterministic DSL: group field not found');
             return null;
         }
-        dsl.dimensions.push({ fieldCaption: getFieldCaption(groupField) });
+        dsl.dimensions.push({ fieldCaption: getResolvedFieldCaption(groupField) });
         dsl.measures.push({
-            fieldCaption: getFieldCaption(metricField),
-            fieldAlias: `Total ${getFieldCaption(metricField)}`,
+            fieldCaption: getResolvedFieldCaption(metricField),
+            fieldAlias: `Total ${getResolvedFieldCaption(metricField)}`,
             function: 'SUM'
         });
     }
 
     if (parsed.intent === 'member_metric_by_year') {
-        const memberFilter = resolveMemberFilterFieldV2(metadataRecords, parsed.member);
+        const memberFilter = resolvedRoles.memberFilter;
         if (!memberFilter) {
             console.log('deterministic DSL: member filter not found');
             return null;
         }
         dsl.measures.push({
-            fieldCaption: getFieldCaption(metricField),
-            fieldAlias: `Total ${getFieldCaption(metricField)}`,
+            fieldCaption: getResolvedFieldCaption(metricField),
+            fieldAlias: `Total ${getResolvedFieldCaption(metricField)}`,
             function: 'SUM'
         });
         dsl.filters.push({
             kind: 'set',
-            fieldCaption: getFieldCaption(memberFilter.field),
+            fieldCaption: getResolvedFieldCaption(memberFilter.field),
             values: [memberFilter.value]
         });
     }
 
     if (parsed.intent === 'top_n_member_metric_entity') {
-        const memberFilter = resolveMemberFilterFieldV2(metadataRecords, parsed.member);
-        const entityField = resolveEntityFieldV2(metadataRecords, parsed.entityLabel);
+        const memberFilter = resolvedRoles.memberFilter;
+        const entityField = resolvedRoles.entityField;
         if (!memberFilter || !entityField) {
             console.log(`deterministic DSL: topN resolution failed member=${!!memberFilter} entity=${!!entityField}`);
             return null;
         }
-        dsl.dimensions.push({ fieldCaption: getFieldCaption(entityField) });
+        dsl.dimensions.push({ fieldCaption: getResolvedFieldCaption(entityField) });
         dsl.measures.push({
-            fieldCaption: getFieldCaption(metricField),
-            fieldAlias: `Total ${getFieldCaption(metricField)}`,
+            fieldCaption: getResolvedFieldCaption(metricField),
+            fieldAlias: `Total ${getResolvedFieldCaption(metricField)}`,
             function: 'SUM',
             sortDirection: 'DESC',
             sortPriority: 1
         });
         dsl.filters.push({
             kind: 'set',
-            fieldCaption: getFieldCaption(memberFilter.field),
+            fieldCaption: getResolvedFieldCaption(memberFilter.field),
             values: [memberFilter.value]
         });
         dsl.filters.push({
             kind: 'topN',
-            fieldCaption: getFieldCaption(entityField),
-            measureFieldCaption: getFieldCaption(metricField),
+            fieldCaption: getResolvedFieldCaption(entityField),
+            measureFieldCaption: getResolvedFieldCaption(metricField),
             measureFunction: 'SUM',
             howMany: parsed.topN || 5,
             direction: parsed.topDirection || 'TOP'
@@ -582,36 +615,112 @@ async function runDeterministicDslQuery(prompt, datasourceLuid) {
     }
 
     if (parsed.intent === 'grouped_top_n_by_year') {
-        const groupField = resolveGroupingField(metadataRecords, parsed.groupLabel);
-        const entityField = resolveEntityFieldV2(metadataRecords, parsed.entityLabel);
+        const groupField = resolvedRoles.groupField;
+        const entityField = resolvedRoles.entityField;
         if (!groupField || !entityField) {
             console.log(`deterministic DSL: grouped topN resolution failed group=${!!groupField} entity=${!!entityField}`);
             return null;
         }
         dsl.dimensions.push({
-            fieldCaption: getFieldCaption(orderDateField),
+            fieldCaption: getResolvedFieldCaption(orderDateField),
             fieldAlias: 'Order Year',
             function: 'YEAR',
             sortDirection: 'ASC',
             sortPriority: 1
         });
         dsl.dimensions.push({
-            fieldCaption: getFieldCaption(groupField),
-            fieldAlias: getFieldCaption(groupField),
+            fieldCaption: getResolvedFieldCaption(groupField),
+            fieldAlias: getResolvedFieldCaption(groupField),
             sortDirection: 'ASC',
             sortPriority: 2
         });
         dsl.dimensions.push({
-            fieldCaption: getFieldCaption(entityField),
-            fieldAlias: getFieldCaption(entityField)
+            fieldCaption: getResolvedFieldCaption(entityField),
+            fieldAlias: getResolvedFieldCaption(entityField)
         });
         dsl.measures.push({
-            fieldCaption: getFieldCaption(metricField),
-            fieldAlias: `Total ${getFieldCaption(metricField)}`,
+            fieldCaption: getResolvedFieldCaption(metricField),
+            fieldAlias: `Total ${getResolvedFieldCaption(metricField)}`,
             function: 'SUM',
             sortDirection: parsed.topDirection === 'BOTTOM' ? 'ASC' : 'DESC',
             sortPriority: 3
         });
+    }
+
+    if (parsed.intent === 'compare_yoy_member_metric') {
+        const memberFilter = resolvedRoles.memberFilter;
+        if (!memberFilter) {
+            console.log('deterministic DSL: member filter not found for yoy');
+            return null;
+        }
+
+        const currentDsl = createEmptyDsl();
+        currentDsl.measures.push({
+            fieldCaption: getResolvedFieldCaption(metricField),
+            fieldAlias: `Total ${getResolvedFieldCaption(metricField)}`,
+            function: 'SUM'
+        });
+        currentDsl.filters.push({
+            kind: 'year',
+            fieldCaption: getResolvedFieldCaption(orderDateField),
+            year: parsed.year
+        });
+        currentDsl.filters.push({
+            kind: 'set',
+            fieldCaption: getResolvedFieldCaption(memberFilter.field),
+            values: [memberFilter.value]
+        });
+
+        const previousDsl = createEmptyDsl();
+        previousDsl.measures.push({
+            fieldCaption: getResolvedFieldCaption(metricField),
+            fieldAlias: `Total ${getResolvedFieldCaption(metricField)}`,
+            function: 'SUM'
+        });
+        previousDsl.filters.push({
+            kind: 'year',
+            fieldCaption: getResolvedFieldCaption(orderDateField),
+            year: String(Number(parsed.year) - 1)
+        });
+        previousDsl.filters.push({
+            kind: 'set',
+            fieldCaption: getResolvedFieldCaption(memberFilter.field),
+            values: [memberFilter.value]
+        });
+
+        const currentResult = await runSingleDslQuery(datasourceLuid, currentDsl);
+        const previousResult = await runSingleDslQuery(datasourceLuid, previousDsl);
+        const currentRow = currentResult.parsedResponse?.data?.[0] || {};
+        const previousRow = previousResult.parsedResponse?.data?.[0] || {};
+        const metricKey = Object.keys(currentRow).find((key) => /total|profit|sales|quantity|discount/i.test(key))
+            || Object.keys(previousRow).find((key) => /total|profit|sales|quantity|discount/i.test(key));
+
+        if (!metricKey) {
+            console.log('deterministic DSL: yoy metric key not found');
+            return null;
+        }
+
+        const currentValue = Number(currentRow[metricKey]) || 0;
+        const previousValue = Number(previousRow[metricKey]) || 0;
+        const diffValue = currentValue - previousValue;
+        const yoyRate = previousValue === 0 ? null : diffValue / previousValue;
+
+        return {
+            type: 'yoy_analysis',
+            parsed,
+            queryResults: [currentResult, previousResult],
+            analysisRows: [{
+                Scope: memberFilter.value,
+                Metric: getResolvedFieldCaption(metricField),
+                'Current Year': parsed.year,
+                'Current Value': currentValue,
+                'Previous Year': String(Number(parsed.year) - 1),
+                'Previous Value': previousValue,
+                Difference: diffValue,
+                'YoY Rate': yoyRate === null ? 'N/A' : yoyRate
+            }],
+            plainMessage: `${memberFilter.value} 在 ${parsed.year} 年的${parsed.metricLabel}与去年对比已完成。`
+        };
     }
 
     const dslDiagnostics = collectDslDiagnostics(dsl);
@@ -622,6 +731,7 @@ async function runDeterministicDslQuery(prompt, datasourceLuid) {
 
     const query = buildVdsQueryFromDsl(dsl);
     return {
+        type: 'single_query',
         query,
         parsed,
         metadataPayload
@@ -1019,6 +1129,20 @@ app.post('/api/analyze-datasource', async (req, res) => {
 
             if (primaryDatasourceLuid) {
                 const deterministicPlan = await runDeterministicDslQuery(prompt, primaryDatasourceLuid);
+                if (deterministicPlan?.type === 'yoy_analysis') {
+                    console.log('命中 deterministic YOY 路径');
+                    const auditHtml = deterministicPlan.queryResults
+                        .map(({ call, mcpResult, parsedResponse }) => buildAuditEntry(call, mcpResult, parsedResponse).html)
+                        .join('');
+                    const finalData = normalizeFinalData(deterministicPlan.analysisRows || []);
+                    return res.json({
+                        status: 'success',
+                        response: auditHtml,
+                        plainMessage: deterministicPlan.plainMessage || '已通过 deterministic YOY 分析返回结果。',
+                        data: finalData,
+                        auditHtml
+                    });
+                }
                 if (deterministicPlan?.query) {
                     console.log('命中 deterministic DSL 路径');
                     const deterministicCall = {
