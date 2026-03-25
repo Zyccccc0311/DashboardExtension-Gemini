@@ -1,0 +1,17 @@
+FROM node:18
+
+WORKDIR /app
+
+# 核心优化：在构建镜像时就预装好 MCP Server，避免运行时下载
+RUN npm install -g @tableau/mcp-server
+
+COPY package*.json ./
+RUN npm install --production
+
+COPY . .
+
+# 环境变量默认值（生产环境建议在 GCP 后台配置）
+ENV PORT 8080
+EXPOSE 8080
+
+CMD ["node", "server.js"]
