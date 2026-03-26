@@ -1,6 +1,6 @@
 # Tableau MCP Chat
 
-Have Chinese version after English ver, thanks!
+##Have Chinese version after English ver, thanks!
 
 A Tableau Dashboard Extension that lets you query Tableau datasources using natural language.
 
