@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tableau x Gemini Assistant</title>
+    <title>Tableau MCP Chat</title>
     <script src="https://cdn.jsdelivr.net/gh/tableau/extensions-api@master/lib/tableau.extensions.1.latest.js"></script>
     <style>
         :root {
-            --bg: #eef4fb;
+            --bg: #f5f7fa;
             --panel: #ffffff;
-            --panel-soft: #f8fbff;
-            --line: #d8e3ef;
-            --text: #17324d;
-            --muted: #657a91;
-            --accent: #1d72d8;
-            --accent-strong: #1559aa;
-            --ok: #1b9c67;
-            --warn: #d97706;
-            --danger: #cb3d3d;
+            --line: #d9dee5;
+            --text: #1f2933;
+            --muted: #5f6c7b;
+            --accent: #1769c2;
+            --accent-soft: #eaf3fc;
+            --user: #edf5ff;
+            --assistant: #ffffff;
+            --ok: #177a4d;
+            --danger: #b93838;
         }
 
         * { box-sizing: border-box; }
@@ -27,72 +27,81 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            background:
-                radial-gradient(circle at top left, rgba(57, 132, 230, 0.12), transparent 28%),
-                linear-gradient(180deg, #f7fbff 0%, var(--bg) 100%);
+            background: var(--bg);
             color: var(--text);
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
         }
 
         body {
-            padding: 14px;
+            padding: 12px;
         }
 
-        .app-shell {
-            width: 100%;
-            height: calc(100vh - 28px);
-            background: var(--panel);
-            border: 1px solid rgba(216, 227, 239, 0.95);
-            border-radius: 22px;
-            box-shadow: 0 10px 24px rgba(23, 50, 77, 0.08);
+        .app {
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr);
+            height: calc(100vh - 24px);
+            border: 1px solid var(--line);
+            border-radius: 8px;
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            background: var(--panel);
+        }
+
+        .sidebar {
+            border-right: 1px solid var(--line);
+            background: #fbfcfd;
+            overflow: auto;
+            padding: 12px;
+        }
+
+        .main {
+            min-width: 0;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            background: #fff;
         }
 
         .header {
-            padding: 20px 24px 16px;
+            padding: 12px 14px;
             border-bottom: 1px solid var(--line);
-            background: linear-gradient(180deg, #fbfdff 0%, #f6faff 100%);
+            background: #fff;
         }
 
-        .header h1 {
+        .title {
             margin: 0;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 800;
-            letter-spacing: 0.01em;
         }
 
         .subtitle {
-            margin: 8px 0 0;
+            margin: 6px 0 0;
             color: var(--muted);
-            font-size: 13px;
+            font-size: 12px;
             line-height: 1.6;
         }
 
         .status-row {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
-            margin-top: 14px;
+            margin-top: 10px;
         }
 
         .chip {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            min-height: 34px;
-            padding: 0 12px;
+            min-height: 30px;
+            padding: 0 10px;
             border-radius: 999px;
-            background: #f2f7fc;
+            border: 1px solid var(--line);
+            background: #f5f7fa;
             color: var(--muted);
             font-size: 12px;
-            border: 1px solid #e5edf6;
         }
 
         .dot {
-            width: 9px;
-            height: 9px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: #a7b6c7;
         }
@@ -101,121 +110,123 @@
             background: var(--ok);
         }
 
-        .workspace {
-            flex: 1;
-            min-height: 0;
-            display: grid;
-            grid-template-columns: 320px minmax(0, 1fr);
-        }
-
-        .sidebar {
-            min-height: 0;
-            overflow: auto;
-            padding: 18px 16px;
-            border-right: 1px solid var(--line);
-            background: var(--panel-soft);
-        }
-
-        .main {
-            min-height: 0;
-            display: flex;
-            flex-direction: column;
-            background: #fcfdff;
-            overflow: hidden;
-        }
-
-        .main-scroll {
-            flex: 1;
-            min-height: 0;
-            overflow: auto;
-            padding: 18px;
-            overscroll-behavior: contain;
-        }
-
-        .composer-bar {
-            flex-shrink: 0;
-            padding: 14px 18px 18px;
-            border-top: 1px solid var(--line);
-            background: #f7fbff;
-        }
-
         .section-title {
             margin: 0 0 10px;
             font-size: 12px;
-            font-weight: 800;
-            color: #72869b;
-            letter-spacing: 0.09em;
+            color: #6f7e8c;
             text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .datasource-list {
+            display: grid;
+            gap: 10px;
         }
 
         .datasource-card {
-            margin-bottom: 10px;
-            padding: 12px;
-            border-radius: 14px;
+            padding: 10px;
             border: 1px solid var(--line);
+            border-radius: 6px;
             background: #fff;
         }
 
         .datasource-name {
-            font-size: 15px;
-            font-weight: 800;
-            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 4px;
         }
 
         .mini {
             color: var(--muted);
             font-size: 12px;
-            line-height: 1.6;
+            line-height: 1.5;
             word-break: break-word;
         }
 
-        .badge {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 4px 9px;
-            border-radius: 999px;
-            background: #e8f1ff;
-            color: var(--accent);
+        .messages {
+            overflow: auto;
+            padding: 14px;
+            display: grid;
+            gap: 12px;
+            align-content: start;
+            background: #fafbfd;
+        }
+
+        .message {
+            max-width: min(900px, 100%);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 12px;
+            background: var(--assistant);
+        }
+
+        .message.user {
+            justify-self: end;
+            background: var(--user);
+        }
+
+        .message-role {
             font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6f7e8c;
+            margin-bottom: 8px;
+        }
+
+        .message-text {
+            white-space: pre-wrap;
+            line-height: 1.65;
+            font-size: 14px;
+            word-break: break-word;
+        }
+
+        .message-block + .message-block {
+            margin-top: 12px;
+        }
+
+        details {
+            border-top: 1px solid #eef1f4;
+            padding-top: 10px;
+        }
+
+        details summary {
+            cursor: pointer;
+            color: #6f7e8c;
+            font-size: 12px;
             font-weight: 700;
         }
 
-        .response-card {
+        .audit-list {
+            margin-top: 8px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .audit-item {
             border: 1px solid var(--line);
-            border-radius: 18px;
+            border-radius: 6px;
+            padding: 8px 10px;
             background: #fff;
-            padding: 18px;
         }
 
-        .result-block + .result-block {
-            margin-top: 20px;
-        }
-
-        .result-title {
-            margin: 0 0 10px;
+        .audit-step {
             font-size: 12px;
-            color: #6f8499;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-weight: 800;
+            font-weight: 700;
+            margin-bottom: 4px;
         }
 
-        .result-text {
-            font-size: 14px;
-            line-height: 1.75;
+        .audit-details {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
             white-space: pre-wrap;
             word-break: break-word;
         }
 
-        .audit-html {
-            overflow: auto;
-            max-height: 280px;
-            padding-right: 4px;
-        }
-
         .table-shell {
             border: 1px solid var(--line);
-            border-radius: 16px;
+            border-radius: 6px;
             overflow: hidden;
             background: #fff;
         }
@@ -223,78 +234,76 @@
         .table-meta {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 12px;
+            gap: 12px;
+            padding: 8px 10px;
             border-bottom: 1px solid var(--line);
-            background: #f8fbff;
+            background: #f5f7fa;
             color: var(--muted);
             font-size: 12px;
         }
 
         .table-wrapper {
-            max-height: min(36vh, 360px);
+            max-height: 320px;
             overflow: auto;
-            overscroll-behavior: contain;
         }
 
         table {
             width: 100%;
-            min-width: 720px;
+            min-width: 560px;
             border-collapse: collapse;
+            table-layout: fixed;
             font-size: 12px;
         }
 
         th, td {
-            padding: 10px 12px;
+            padding: 9px 10px;
             text-align: left;
             border-bottom: 1px solid #edf2f7;
             vertical-align: top;
         }
 
         th {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            background: #f7fbff;
+            background: #f5f7fa;
             color: var(--muted);
-            font-weight: 800;
-            white-space: nowrap;
+            font-weight: 700;
         }
 
         td {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 320px;
-            line-height: 1.45;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .composer {
+            border-top: 1px solid var(--line);
+            padding: 12px;
+            background: #fff;
         }
 
         .composer-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto auto;
             gap: 10px;
-            align-items: stretch;
         }
 
-        #prompt-input {
+        textarea {
             width: 100%;
+            min-height: 70px;
+            max-height: 180px;
+            resize: vertical;
             border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 13px 14px;
-            font-size: 14px;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font: inherit;
             color: var(--text);
-            outline: none;
-            background: #fff;
         }
 
         button {
-            min-height: 48px;
+            min-height: 42px;
             border: none;
-            border-radius: 14px;
-            padding: 0 18px;
-            font-size: 14px;
-            font-weight: 800;
+            border-radius: 6px;
+            padding: 0 16px;
+            font: inherit;
+            font-weight: 700;
             cursor: pointer;
         }
 
@@ -303,154 +312,90 @@
             cursor: not-allowed;
         }
 
-        #action-btn {
-            background: linear-gradient(180deg, #2a86eb 0%, var(--accent) 100%);
+        #send-btn {
+            background: var(--accent);
             color: #fff;
         }
 
-        #download-btn {
-            background: linear-gradient(180deg, #24a373 0%, #168b60 100%);
-            color: #fff;
-            display: none;
+        #clear-btn {
+            background: #eef2f6;
+            color: var(--text);
         }
 
         .error {
             color: var(--danger);
-            white-space: pre-wrap;
-            line-height: 1.6;
         }
 
-        @media (max-width: 980px) {
-            .workspace {
+        @media (max-width: 900px) {
+            .app {
                 grid-template-columns: 1fr;
+                grid-template-rows: 220px minmax(0, 1fr);
             }
 
             .sidebar {
-                max-height: 180px;
                 border-right: none;
                 border-bottom: 1px solid var(--line);
-            }
-
-            .table-wrapper {
-                max-height: min(30vh, 280px);
-            }
-        }
-
-        @media (max-width: 720px) {
-            body {
-                padding: 8px;
-            }
-
-            .app-shell {
-                height: calc(100vh - 16px);
-                border-radius: 16px;
-            }
-
-            .header,
-            .main-scroll,
-            .composer-bar,
-            .sidebar {
-                padding-left: 14px;
-                padding-right: 14px;
             }
 
             .composer-grid {
                 grid-template-columns: 1fr;
             }
-
-            .header h1 {
-                font-size: 17px;
-            }
-
-            .subtitle {
-                font-size: 12px;
-            }
-
-            .status-row {
-                gap: 8px;
-            }
-
-            .chip {
-                min-height: 30px;
-                padding: 0 10px;
-                font-size: 11px;
-            }
-
-            .main-scroll {
-                padding: 12px;
-            }
-
-            .composer-bar {
-                padding: 12px;
-            }
-
-            .response-card {
-                padding: 14px;
-            }
-
-            .table-wrapper {
-                max-height: min(28vh, 220px);
-            }
-
-            table {
-                min-width: 560px;
-            }
         }
     </style>
 </head>
 <body>
-    <div class="app-shell">
-        <div class="header">
-            <h1>Tableau x Gemini Assistant</h1>
-            <p class="subtitle">先锁定 dashboard 中正在使用的数据源，再到 Tableau MCP 精确匹配并读取 metadata，最后执行查询与筛选。</p>
-            <div class="status-row">
-                <div class="chip">
-                    <span id="status-dot" class="dot"></span>
-                    <span id="status-text">初始化中</span>
+    <div class="app">
+        <aside class="sidebar">
+            <h2 class="section-title">Dashboard Context</h2>
+            <div id="datasource-list" class="datasource-list">
+                <div class="datasource-card">
+                    <div class="mini">正在读取 dashboard 数据源...</div>
                 </div>
-                <div class="chip" id="filter-status">尚未执行筛选</div>
             </div>
-        </div>
+        </aside>
 
-        <div class="workspace">
-            <aside class="sidebar">
-                <h2 class="section-title">Dashboard 数据源</h2>
-                <div id="datasource-list">正在读取 worksheet 中的数据源...</div>
-            </aside>
-
-            <main class="main">
-                <div class="main-scroll">
-                    <div id="response-area" class="response-card">
-                        <div class="result-block">
-                            <div class="result-title">状态</div>
-                            <div class="result-text">准备就绪后，你可以输入“请计算 2025 年每个 Segment 的利润”。</div>
-                        </div>
+        <section class="main">
+            <div class="header">
+                <h1 class="title">Tableau MCP Chat</h1>
+                <p class="subtitle">把问题、OpenAPI 说明、MCP tool 描述和当前 dashboard datasource metadata 一起交给 Gemini，让它像 Claude 那样自行规划和查询。</p>
+                <div class="status-row">
+                    <div class="chip">
+                        <span id="tableau-dot" class="dot"></span>
+                        <span id="tableau-status">Tableau 未连接</span>
+                    </div>
+                    <div class="chip">
+                        <span id="mcp-dot" class="dot"></span>
+                        <span id="mcp-status">MCP 未连接</span>
                     </div>
                 </div>
+            </div>
 
-                <div class="composer-bar">
-                    <div class="composer-grid">
-                        <input type="text" id="prompt-input" value="请计算 2025 年每个 Segment 的利润">
-                        <button id="action-btn" disabled>发送</button>
-                        <button id="download-btn">下载 CSV</button>
-                    </div>
+            <div id="messages" class="messages"></div>
+
+            <div class="composer">
+                <div class="composer-grid">
+                    <textarea id="prompt-input" placeholder="例如：查看每一年每个 Segment 的利润排名前十的产品"></textarea>
+                    <button id="send-btn" disabled>发送</button>
+                    <button id="clear-btn">新对话</button>
                 </div>
-            </main>
-        </div>
+            </div>
+        </section>
     </div>
 
     <script>
-        const responseArea = document.getElementById('response-area');
-        const actionBtn = document.getElementById('action-btn');
-        const downloadBtn = document.getElementById('download-btn');
-        const promptInput = document.getElementById('prompt-input');
-        const statusDot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
+        const messagesEl = document.getElementById('messages');
         const datasourceList = document.getElementById('datasource-list');
-        const filterStatus = document.getElementById('filter-status');
+        const promptInput = document.getElementById('prompt-input');
+        const sendBtn = document.getElementById('send-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const tableauDot = document.getElementById('tableau-dot');
+        const tableauStatus = document.getElementById('tableau-status');
+        const mcpDot = document.getElementById('mcp-dot');
+        const mcpStatus = document.getElementById('mcp-status');
 
-        let currentTableData = [];
+        let dashboardMetaPromise = null;
         let currentDashboardMeta = [];
+        let chatHistory = [];
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -461,19 +406,15 @@
                 .replace(/'/g, '&#39;');
         }
 
-        function stripHtmlTags(value) {
-            return String(value ?? '').replace(/<[^>]+>/g, '').trim();
-        }
-
         function formatDisplayValue(value) {
             if (value === null || value === undefined) return '';
-            if (Array.isArray(value)) return value.map(item => formatDisplayValue(item)).join(' | ');
-            if (typeof value === 'object') return Object.entries(value).map(([k, v]) => `${k}: ${formatDisplayValue(v)}`).join(', ');
+            if (Array.isArray(value)) return value.map((item) => formatDisplayValue(item)).join(' | ');
+            if (typeof value === 'object') return Object.entries(value).map(([key, item]) => `${key}: ${formatDisplayValue(item)}`).join(', ');
             return String(value);
         }
 
         function collectHeaders(rows) {
-            if (!Array.isArray(rows) || rows.length === 0) return [];
+            if (!Array.isArray(rows) || !rows.length) return [];
             const headers = [];
             rows.forEach((row) => {
                 Object.keys(row || {}).forEach((key) => {
@@ -483,51 +424,50 @@
             return headers;
         }
 
-        function extractLegacyPayload(responseText) {
-            const rawText = String(responseText || '');
-            const dataMatch = rawText.match(/\[DATA\]([\s\S]*?)\[\/DATA\]/i);
-            let data = [];
-            let plainMessage = rawText;
-            let auditHtml = '';
-
-            if (dataMatch) {
-                const rawJson = dataMatch[1].replace(/```json/gi, '').replace(/```/g, '').trim();
-                try { data = JSON.parse(rawJson); } catch { data = []; }
-                plainMessage = rawText.replace(/\[DATA\][\s\S]*?\[\/DATA\]/i, '').trim();
-            }
-
-            const auditStart = plainMessage.indexOf('<div');
-            if (auditStart >= 0) {
-                const auditEnd = plainMessage.lastIndexOf('</div>');
-                if (auditEnd >= auditStart) {
-                    auditHtml = plainMessage.slice(auditStart, auditEnd + 6).trim();
-                    plainMessage = (plainMessage.slice(0, auditStart) + plainMessage.slice(auditEnd + 6)).trim();
-                }
-            }
-
-            return { plainMessage, data, auditHtml };
+        function setChip(active, dotEl, textEl, text) {
+            dotEl.classList.toggle('active', active);
+            textEl.textContent = text;
         }
 
-        function generateHTMLTable(data) {
-            if (!Array.isArray(data) || data.length === 0) return '';
-            const headers = collectHeaders(data);
+        function renderDatasourcePanel(items) {
+            if (!items.length) {
+                datasourceList.innerHTML = `
+                    <div class="datasource-card">
+                        <div class="mini">当前没有读取到 dashboard 数据源。</div>
+                    </div>
+                `;
+                return;
+            }
+
+            datasourceList.innerHTML = items.map((item) => `
+                <div class="datasource-card">
+                    <div class="datasource-name">${escapeHtml(item.datasourceName)}</div>
+                    <div class="mini">Worksheet: ${escapeHtml(item.worksheetName)}</div>
+                    <div class="mini">Fields: ${escapeHtml((item.fields || []).slice(0, 8).join(', '))}${(item.fields || []).length > 8 ? '...' : ''}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderTable(rows) {
+            if (!Array.isArray(rows) || !rows.length) return '';
+            const headers = collectHeaders(rows);
             return `
                 <div class="table-shell">
                     <div class="table-meta">
-                        <span>共 ${data.length} 行结果</span>
-                        <span>支持横向与纵向滚动</span>
+                        <span>${rows.length} rows</span>
+                        <span>结果表</span>
                     </div>
                     <div class="table-wrapper">
                         <table>
                             <thead>
-                                <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
+                                <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
                             </thead>
                             <tbody>
-                                ${data.map(row => `
+                                ${rows.map((row) => `
                                     <tr>
-                                        ${headers.map(h => {
-                                            const displayValue = formatDisplayValue(row[h]);
-                                            return `<td title="${escapeHtml(displayValue)}">${escapeHtml(displayValue)}</td>`;
+                                        ${headers.map((header) => {
+                                            const value = formatDisplayValue(row[header]);
+                                            return `<td title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
                                         }).join('')}
                                     </tr>
                                 `).join('')}
@@ -538,233 +478,165 @@
             `;
         }
 
-        function renderMessage(message, audit = [], data = [], auditHtmlRaw = '') {
-            const text = stripHtmlTags(message || '') || 'No content returned.';
-
-            const auditHtml = audit.length
-                ? `
-                    <div class="result-block">
-                        <div class="result-title">执行轨迹</div>
-                        <div class="result-text">${audit.map(item => `${item.step}\n${item.details}`).join('\n\n')}</div>
+        function renderAudit(audit) {
+            if (!Array.isArray(audit) || !audit.length) return '';
+            return `
+                <details class="message-block">
+                    <summary>执行轨迹</summary>
+                    <div class="audit-list">
+                        ${audit.map((item) => `
+                            <div class="audit-item">
+                                <div class="audit-step">${escapeHtml(item.step)}</div>
+                                <div class="audit-details">${escapeHtml(item.details)}</div>
+                            </div>
+                        `).join('')}
                     </div>
-                `
-                : (auditHtmlRaw
-                    ? `
-                        <div class="result-block">
-                            <div class="result-title">执行轨迹</div>
-                            <div class="audit-html">${auditHtmlRaw}</div>
-                        </div>
-                    `
-                    : '');
-
-            const tableHtml = data.length
-                ? `
-                    <div class="result-block">
-                        <div class="result-title">结果表</div>
-                        ${generateHTMLTable(data)}
-                    </div>
-                `
-                : '';
-
-            responseArea.innerHTML = `
-                <div class="result-block">
-                    <div class="result-title">AI 输出</div>
-                    <div class="result-text">${escapeHtml(text)}</div>
-                </div>
-                ${tableHtml}
-                ${auditHtml}
+                </details>
             `;
         }
 
-        function updateDatasourcePanel(items) {
-            if (!items.length) {
-                datasourceList.innerHTML = '<div class="result-text">当前 dashboard 未读取到数据源。</div>';
-                return;
-            }
+        function appendMessage(message) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `message ${message.role}`;
+            wrapper.innerHTML = `
+                <div class="message-role">${message.role === 'user' ? 'User' : 'Assistant'}</div>
+                <div class="message-text">${escapeHtml(message.content || '')}</div>
+                ${message.data?.length ? `<div class="message-block">${renderTable(message.data)}</div>` : ''}
+                ${renderAudit(message.audit)}
+            `;
+            messagesEl.appendChild(wrapper);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
 
-            datasourceList.innerHTML = items.map(item => `
-                <div class="datasource-card">
-                    <div class="datasource-name">${escapeHtml(item.datasourceName)}</div>
-                    <div class="mini">Worksheet: ${escapeHtml(item.worksheetName)}</div>
-                    <div class="mini">字段预览: ${escapeHtml((item.fields || []).slice(0, 6).join(', '))}${(item.fields || []).length > 6 ? '...' : ''}</div>
-                    <div class="badge">${escapeHtml(item.localId || 'no-local-id')}</div>
-                </div>
-            `).join('');
+        function resetConversation() {
+            chatHistory = [];
+            messagesEl.innerHTML = '';
+            appendMessage({
+                role: 'assistant',
+                content: '准备好了。你可以直接问业务问题，我会结合 OpenAPI、MCP tool 描述和当前 dashboard metadata 来查询。'
+            });
         }
 
         async function extractDashboardMeta() {
             const dashboard = tableau.extensions.dashboardContent.dashboard;
-            const rows = [];
-            for (const worksheet of dashboard.worksheets) {
-                const datasources = await worksheet.getDataSourcesAsync();
-                for (const datasource of datasources) {
-                    rows.push({
+            const groups = await Promise.all(
+                dashboard.worksheets.map(async (worksheet) => {
+                    const datasources = await worksheet.getDataSourcesAsync();
+                    return datasources.map((datasource) => ({
                         worksheetName: worksheet.name,
                         datasourceName: datasource.name,
                         localId: datasource.id,
-                        fields: (datasource.fields || []).map(field => field.name)
-                    });
-                }
-            }
-            return rows;
-        }
-
-        function toDateAtUtcMidnight(value) {
-            if (!value) return undefined;
-            const parts = String(value).split('-').map(Number);
-            if (parts.length !== 3 || parts.some(Number.isNaN)) return new Date(value);
-            return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-        }
-
-        function mapFilterUpdateType(updateType) {
-            const key = String(updateType || 'replace').toLowerCase();
-            if (key === 'add') return tableau.FilterUpdateType.Add;
-            if (key === 'remove') return tableau.FilterUpdateType.Remove;
-            if (key === 'all') return tableau.FilterUpdateType.All;
-            return tableau.FilterUpdateType.Replace;
-        }
-
-        function mapPeriodType(periodType) {
-            const key = String(periodType || '').toLowerCase();
-            if (key === 'year' || key === 'years') return tableau.PeriodType.Years;
-            if (key === 'quarter' || key === 'quarters') return tableau.PeriodType.Quarters;
-            if (key === 'month' || key === 'months') return tableau.PeriodType.Months;
-            if (key === 'week' || key === 'weeks') return tableau.PeriodType.Weeks;
-            return tableau.PeriodType.Days;
-        }
-
-        function mapRangeType(rangeType) {
-            const key = String(rangeType || '').toLowerCase();
-            if (key === 'last') return tableau.DateRangeType.Last;
-            if (key === 'lastn') return tableau.DateRangeType.LastN;
-            if (key === 'next') return tableau.DateRangeType.Next;
-            if (key === 'nextn') return tableau.DateRangeType.NextN;
-            if (key === 'todate') return tableau.DateRangeType.ToDate;
-            return tableau.DateRangeType.Current;
-        }
-
-        async function applyFilterCommands(commands) {
-            if (!Array.isArray(commands) || commands.length === 0) {
-                filterStatus.textContent = '没有需要应用的筛选';
-                return;
-            }
-
-            const dashboard = tableau.extensions.dashboardContent.dashboard;
-            let appliedCount = 0;
-
-            for (const command of commands) {
-                const targetNames = command.worksheetNames?.length
-                    ? command.worksheetNames
-                    : dashboard.worksheets.map(worksheet => worksheet.name);
-                const targetWorksheets = dashboard.worksheets.filter(worksheet => targetNames.includes(worksheet.name));
-
-                for (const worksheet of targetWorksheets) {
-                    if (command.kind === 'clear') {
-                        await worksheet.clearFilterAsync(command.fieldName);
-                    } else if (command.kind === 'categorical') {
-                        await worksheet.applyFilterAsync(command.fieldName, (command.values || []).map(v => String(v)), mapFilterUpdateType(command.updateType), {});
-                    } else if (command.kind === 'range') {
-                        const range = {};
-                        if (command.min !== undefined) range.min = command.min;
-                        if (command.max !== undefined) range.max = command.max;
-                        if (command.minDate) range.min = toDateAtUtcMidnight(command.minDate);
-                        if (command.maxDate) range.max = toDateAtUtcMidnight(command.maxDate);
-                        await worksheet.applyRangeFilterAsync(command.fieldName, range);
-                    } else if (command.kind === 'relativeDate') {
-                        await worksheet.applyRelativeDateFilterAsync(command.fieldName, {
-                            periodType: mapPeriodType(command.periodType),
-                            rangeType: mapRangeType(command.rangeType),
-                            rangeN: command.rangeN ?? 1,
-                            anchorDate: toDateAtUtcMidnight(command.anchorDate) || new Date()
-                        });
-                    }
-                    appliedCount += 1;
-                }
-            }
-
-            filterStatus.textContent = `已应用 ${appliedCount} 次 worksheet 筛选`;
+                        fields: (datasource.fields || []).map((field) => field.name)
+                    }));
+                })
+            );
+            return groups.flat();
         }
 
         async function loadDashboardMeta() {
-            currentDashboardMeta = await extractDashboardMeta();
-            updateDatasourcePanel(currentDashboardMeta);
+            if (dashboardMetaPromise) return dashboardMetaPromise;
+
+            dashboardMetaPromise = extractDashboardMeta()
+                .then((items) => {
+                    currentDashboardMeta = items;
+                    renderDatasourcePanel(items);
+                    return items;
+                })
+                .finally(() => {
+                    dashboardMetaPromise = null;
+                });
+
+            return dashboardMetaPromise;
         }
 
-        tableau.extensions.initializeAsync().then(async () => {
-            statusDot.classList.add('active');
-            statusText.textContent = 'Tableau 扩展已连接';
-            actionBtn.disabled = false;
+        async function refreshMcpStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const json = await response.json();
+                if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
+                setChip(true, mcpDot, mcpStatus, `MCP 已连接 · ${json.toolCount} tools`);
+                return true;
+            } catch (error) {
+                setChip(false, mcpDot, mcpStatus, `MCP 连接失败: ${error.message}`);
+                return false;
+            }
+        }
 
-            await loadDashboardMeta();
-            tableau.extensions.dashboardContent.dashboard.worksheets.forEach((worksheet) => {
-                worksheet.addEventListener(tableau.TableauEventType.FilterChanged, async () => {
-                    await loadDashboardMeta();
+        async function initialize() {
+            const mcpReady = await refreshMcpStatus();
+
+            try {
+                await tableau.extensions.initializeAsync();
+                setChip(true, tableauDot, tableauStatus, 'Tableau 已连接');
+                await loadDashboardMeta();
+                tableau.extensions.dashboardContent.dashboard.worksheets.forEach((worksheet) => {
+                    worksheet.addEventListener(tableau.TableauEventType.FilterChanged, () => {
+                        loadDashboardMeta().catch((error) => console.error('Failed to refresh dashboard metadata', error));
+                    });
                 });
-            });
-        }).catch((error) => {
-            statusText.textContent = '初始化失败';
-            responseArea.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
-        });
+                sendBtn.disabled = !mcpReady;
+            } catch (error) {
+                setChip(false, tableauDot, tableauStatus, `Tableau 初始化失败: ${error.message}`);
+                sendBtn.disabled = true;
+            }
 
-        actionBtn.addEventListener('click', async () => {
-            const prompt = promptInput.value.trim();
-            if (!prompt) return;
+            resetConversation();
+        }
 
-            actionBtn.disabled = true;
-            actionBtn.textContent = '处理中...';
-            downloadBtn.style.display = 'none';
-            filterStatus.textContent = '正在准备筛选命令';
-            renderMessage('正在根据 worksheet 数据源名称匹配 Tableau MCP 数据源，并读取 metadata...');
+        async function sendMessage() {
+            const content = promptInput.value.trim();
+            if (!content) return;
+
+            appendMessage({ role: 'user', content });
+            chatHistory.push({ role: 'user', content });
+            promptInput.value = '';
+            sendBtn.disabled = true;
 
             try {
                 await loadDashboardMeta();
-                const response = await fetch('/api/analyze-datasource', {
+                const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, dashboardMeta: currentDashboardMeta })
+                    body: JSON.stringify({
+                        message: content,
+                        history: chatHistory.slice(-8),
+                        dashboardMeta: currentDashboardMeta
+                    })
                 });
                 const json = await response.json();
-                if (!response.ok) throw new Error(json.error || `请求失败，状态码 ${response.status}`);
+                if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
 
-                const legacyPayload = (!Array.isArray(json.data) && json.response)
-                    ? extractLegacyPayload(json.response)
-                    : { plainMessage: json.plainMessage, data: json.data, auditHtml: json.auditHtml || '' };
+                const assistantMessage = {
+                    role: 'assistant',
+                    content: json.message || 'No response returned.',
+                    data: Array.isArray(json.data) ? json.data : [],
+                    audit: Array.isArray(json.audit) ? json.audit : []
+                };
 
-                currentTableData = Array.isArray(legacyPayload.data) ? legacyPayload.data : [];
-                renderMessage(legacyPayload.plainMessage || json.plainMessage || json.response, json.audit || [], currentTableData, legacyPayload.auditHtml || '');
-
-                if (currentTableData.length > 0) downloadBtn.style.display = 'inline-block';
-                await applyFilterCommands(json.filterCommands || []);
+                appendMessage(assistantMessage);
+                chatHistory.push({ role: 'assistant', content: assistantMessage.content });
             } catch (error) {
-                filterStatus.textContent = '筛选未执行';
-                responseArea.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+                appendMessage({
+                    role: 'assistant',
+                    content: `请求失败：${error.message}`
+                });
+                chatHistory.push({ role: 'assistant', content: `请求失败：${error.message}` });
             } finally {
-                actionBtn.disabled = false;
-                actionBtn.textContent = '发送';
+                sendBtn.disabled = false;
+                promptInput.focus();
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        clearBtn.addEventListener('click', resetConversation);
+        promptInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
             }
         });
 
-        downloadBtn.addEventListener('click', () => {
-            if (!currentTableData.length) return;
-            const headers = collectHeaders(currentTableData);
-            const lines = [
-                headers.join(','),
-                ...currentTableData.map((row) =>
-                    headers.map((header) => {
-                        let value = row[header];
-                        if (value === null || value === undefined) value = '';
-                        if (typeof value === 'object') value = formatDisplayValue(value);
-                        return `"${String(value).replace(/"/g, '""')}"`;
-                    }).join(',')
-                )
-            ];
-            const blob = new Blob(["\ufeff" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `tableau_ai_${Date.now()}.csv`;
-            link.click();
-            URL.revokeObjectURL(link.href);
-        });
+        initialize();
     </script>
 </body>
 </html>
