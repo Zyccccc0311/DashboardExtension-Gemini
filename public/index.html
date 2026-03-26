@@ -7,484 +7,670 @@
     <script src="https://cdn.jsdelivr.net/gh/tableau/extensions-api@master/lib/tableau.extensions.1.latest.js"></script>
     <style>
         :root {
-            --bg: #f5f7fa;
-            --panel: #ffffff;
-            --line: #d9dee5;
-            --text: #1f2933;
-            --muted: #5f6c7b;
-            --accent: #1769c2;
-            --accent-soft: #eaf3fc;
-            --user: #edf5ff;
-            --assistant: #ffffff;
-            --ok: #177a4d;
-            --danger: #b93838;
+            --primary-color: #2563EB;
+            --primary-hover: #1D4ED8;
+            --primary-light: #EFF6FF;
+            --bg-page: #F8FAFC;
+            --bg-card: #FFFFFF;
+            --text-main: #334155;
+            --text-secondary: #64748B;
+            --border-light: #E2E8F0;
+            --negative-value: #EF4444;
+            --ok: #10B981;
+            --danger: #EF4444;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+            --transition: all 0.2s ease;
         }
 
-        * { box-sizing: border-box; }
-
-        html, body {
-            margin: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: var(--bg);
-            color: var(--text);
-            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
 
         body {
-            padding: 12px;
-        }
-
-        .app {
-            display: grid;
-            grid-template-columns: 300px minmax(0, 1fr);
-            height: calc(100vh - 24px);
-            border: 1px solid var(--line);
-            border-radius: 8px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-page);
+            color: var(--text-main);
+            height: 100vh;
             overflow: hidden;
-            background: var(--panel);
+            font-size: 14px;
+            line-height: 1.5;
         }
 
-        .sidebar {
-            border-right: 1px solid var(--line);
-            background: #fbfcfd;
-            overflow: auto;
-            padding: 12px;
-        }
-
-        .main {
-            min-width: 0;
+        /* ── 整体容器 ── */
+        .app-container {
             display: grid;
-            grid-template-rows: auto minmax(0, 1fr) auto;
-            background: #fff;
+            height: calc(100vh - 16px);
+            margin: 8px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            grid-template-areas: "header" "main" "input";
+            grid-template-rows: auto 1fr 72px;
         }
 
-        .header {
-            padding: 12px 14px;
-            border-bottom: 1px solid var(--line);
-            background: #fff;
-        }
-
-        .title {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 800;
-        }
-
-        .subtitle {
-            margin: 6px 0 0;
-            color: var(--muted);
-            font-size: 12px;
-            line-height: 1.6;
-        }
-
-        .status-row {
+        /* ── Header ── */
+        header {
+            grid-area: header;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-light);
             display: flex;
-            gap: 8px;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+            min-height: 56px;
+            gap: 12px;
             flex-wrap: wrap;
-            margin-top: 10px;
         }
 
-        .chip {
-            display: inline-flex;
+        .header-left {
+            display: flex;
             align-items: center;
             gap: 8px;
-            min-height: 30px;
-            padding: 0 10px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            background: #f5f7fa;
-            color: var(--muted);
-            font-size: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            color: #0F172A;
+            flex-shrink: 0;
         }
 
-        .dot {
+        .status-dot {
             width: 8px;
             height: 8px;
+            background: #CBD5E1;
             border-radius: 50%;
-            background: #a7b6c7;
+            display: inline-block;
+            flex-shrink: 0;
+            transition: background 0.3s ease;
         }
 
-        .dot.active {
-            background: var(--ok);
-        }
+        .status-dot.active { background: var(--ok); }
 
-        .section-title {
-            margin: 0 0 10px;
+        .header-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        .chip {
             font-size: 12px;
-            color: #6f7e8c;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
+            background: #F1F5F9;
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+            border: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
         }
 
-        .datasource-list {
-            display: grid;
-            gap: 10px;
+        .chip-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #CBD5E1;
+            flex-shrink: 0;
+            transition: background 0.3s ease;
         }
 
-        .datasource-card {
-            padding: 10px;
-            border: 1px solid var(--line);
-            border-radius: 6px;
-            background: #fff;
+        .chip-dot.active { background: var(--ok); }
+
+        /* ── Main ── */
+        main {
+            grid-area: main;
+            display: flex;
+            overflow: hidden;
+            background: var(--bg-page);
         }
 
-        .datasource-name {
-            font-size: 14px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-
-        .mini {
-            color: var(--muted);
-            font-size: 12px;
-            line-height: 1.5;
-            word-break: break-word;
-        }
-
-        .messages {
-            overflow: auto;
-            padding: 14px;
-            display: grid;
-            gap: 12px;
-            align-content: start;
-            background: #fafbfd;
+        /* ── Chat area ── */
+        .chat-view {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
         }
 
         .message {
-            max-width: min(900px, 100%);
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: 12px;
-            background: var(--assistant);
+            max-width: 85%;
+            padding: 14px 18px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            line-height: 1.65;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-top-left-radius: 4px;
+            box-shadow: var(--shadow-sm);
         }
 
         .message.user {
-            justify-self: end;
-            background: var(--user);
+            align-self: flex-end;
+            background: var(--primary-light);
+            color: #1E3A8A;
+            border-top-right-radius: 4px;
+            border: 1px solid #DBEAFE;
         }
 
-        .message-role {
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #6f7e8c;
-            margin-bottom: 8px;
+        .message-text { word-break: break-word; line-height: 1.7; }
+        .message-text.error-text { color: var(--danger); }
+        .message-text p { margin: 0 0 8px; }
+        .message-text p:last-child { margin-bottom: 0; }
+        .message-text strong { font-weight: 700; }
+        .message-text em { font-style: italic; }
+        .message-text ul, .message-text ol { padding-left: 20px; margin: 6px 0; }
+        .message-text li { margin: 3px 0; }
+
+        /* Markdown table inside message */
+        .md-table-wrap { overflow-x: auto; margin: 10px 0; border-radius: var(--radius-sm); border: 1px solid var(--border-light); }
+        .md-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .md-table th { background: #F8FAFC; color: var(--text-secondary); font-weight: 600; padding: 8px 14px; text-align: left; border-bottom: 1px solid var(--border-light); white-space: nowrap; }
+        .md-table td { padding: 8px 14px; border-bottom: 1px solid var(--border-light); white-space: nowrap; }
+        .md-table tr:last-child td { border-bottom: none; }
+        .md-table tr:hover td { background: #F8FAFC; }
+
+        /* ── Data Card ── */
+        .data-card {
+            margin-top: 14px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            overflow: hidden;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
         }
 
-        .message-text {
-            white-space: pre-wrap;
-            line-height: 1.65;
-            font-size: 14px;
-            word-break: break-word;
+        .card-header {
+            padding: 9px 16px;
+            background: #F8FAFC;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-light);
         }
 
-        .message-block + .message-block {
+        .card-title { font-size: 13px; color: var(--text-main); font-weight: 600; }
+
+        .download-btn {
+            background: var(--bg-card);
+            color: var(--primary-color);
+            border: 1px solid var(--border-light);
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .download-btn:hover { background: var(--primary-light); border-color: var(--primary-color); }
+
+        .table-container { overflow-x: auto; max-height: 280px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+        th, td {
+            padding: 9px 16px;
+            text-align: left;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        th {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            box-shadow: 0 1px 0 var(--border-light);
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background-color: #F8FAFC; }
+        .negative { color: var(--negative-value); font-weight: 600; }
+
+        /* ── Audit trail ── */
+        .audit-wrapper {
             margin-top: 12px;
-        }
-
-        details {
-            border-top: 1px solid #eef1f4;
+            border-top: 1px solid var(--border-light);
             padding-top: 10px;
         }
 
         details summary {
             cursor: pointer;
-            color: #6f7e8c;
+            color: var(--text-secondary);
             font-size: 12px;
-            font-weight: 700;
+            font-weight: 600;
+            user-select: none;
+            list-style: none;
         }
 
-        .audit-list {
-            margin-top: 8px;
-            display: grid;
-            gap: 8px;
-        }
+        details summary::-webkit-details-marker { display: none; }
+
+        .audit-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 
         .audit-item {
-            border: 1px solid var(--line);
+            border: 1px solid var(--border-light);
             border-radius: 6px;
-            padding: 8px 10px;
-            background: #fff;
+            padding: 8px 12px;
+            background: #F8FAFC;
         }
 
-        .audit-step {
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
+        .audit-step { font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; }
 
         .audit-details {
-            color: var(--muted);
-            font-size: 12px;
+            color: var(--text-secondary);
+            font-size: 11px;
             line-height: 1.5;
             white-space: pre-wrap;
             word-break: break-word;
         }
 
-        .table-shell {
-            border: 1px solid var(--line);
-            border-radius: 6px;
-            overflow: hidden;
-            background: #fff;
-        }
-
-        .table-meta {
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-card);
+            border-left: 1px solid var(--border-light);
+            padding: 20px 16px;
             display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--line);
-            background: #f5f7fa;
-            color: var(--muted);
-            font-size: 12px;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+            flex-shrink: 0;
         }
 
-        .table-wrapper {
-            max-height: 320px;
-            overflow: auto;
-        }
-
-        table {
-            width: 100%;
-            min-width: 560px;
-            border-collapse: collapse;
-            table-layout: fixed;
-            font-size: 12px;
-        }
-
-        th, td {
-            padding: 9px 10px;
-            text-align: left;
-            border-bottom: 1px solid #edf2f7;
-            vertical-align: top;
-        }
-
-        th {
-            background: #f5f7fa;
-            color: var(--muted);
+        .sidebar-section h4 {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            letter-spacing: 0.6px;
             font-weight: 700;
         }
 
-        td {
-            white-space: normal;
-            overflow-wrap: anywhere;
+        .datasource-card {
+            padding: 10px 12px;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            background: #F8FAFC;
+            margin-bottom: 8px;
         }
 
-        .composer {
-            border-top: 1px solid var(--line);
-            padding: 12px;
-            background: #fff;
+        .datasource-name { font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; }
+        .mini { color: var(--text-secondary); font-size: 12px; line-height: 1.5; word-break: break-word; }
+
+        .field-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+
+        .field-item {
+            padding: 3px 8px;
+            background: #F1F5F9;
+            color: var(--text-main);
+            border-radius: 4px;
+            font-size: 11px;
+            border: 1px solid transparent;
         }
 
-        .composer-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto auto;
+        .list-item {
+            padding: 7px 10px;
+            color: var(--text-main);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: var(--transition);
+            font-size: 13px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .list-item:hover { background: var(--primary-light); color: var(--primary-color); }
+
+        /* ── Input ── */
+        .input-container {
+            grid-area: input;
+            background: var(--bg-card);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            border-top: 1px solid var(--border-light);
             gap: 10px;
         }
 
-        textarea {
-            width: 100%;
-            min-height: 70px;
-            max-height: 180px;
-            resize: vertical;
-            border: 1px solid var(--line);
-            border-radius: 6px;
-            padding: 10px 12px;
-            font: inherit;
-            color: var(--text);
+        .input-box {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+            background: var(--bg-page);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px 8px 16px;
+            transition: var(--transition);
+            align-items: center;
         }
 
-        button {
-            min-height: 42px;
+        .input-box:focus-within {
+            background: #fff;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        #prompt-input {
+            flex: 1;
             border: none;
+            background: transparent;
+            font-size: 14px;
+            color: var(--text-main);
+            font-family: inherit;
+        }
+
+        #prompt-input::placeholder { color: #94A3B8; }
+
+        .send-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 7px 18px;
             border-radius: 6px;
-            padding: 0 16px;
-            font: inherit;
-            font-weight: 700;
             cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: var(--transition);
+            font-family: inherit;
+            white-space: nowrap;
         }
 
-        button:disabled {
-            opacity: 0.65;
-            cursor: not-allowed;
+        .send-btn:hover:not(:disabled) { background: var(--primary-hover); }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .clear-btn {
+            background: #F1F5F9;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-light);
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: var(--transition);
+            font-family: inherit;
+            white-space: nowrap;
         }
 
-        #send-btn {
-            background: var(--accent);
-            color: #fff;
-        }
+        .clear-btn:hover { background: #E2E8F0; color: var(--text-main); }
 
-        #clear-btn {
-            background: #eef2f6;
-            color: var(--text);
-        }
-
-        .error {
-            color: var(--danger);
-        }
-
+        /* ── Responsive ── */
         @media (max-width: 900px) {
-            .app {
-                grid-template-columns: 1fr;
-                grid-template-rows: 220px minmax(0, 1fr);
-            }
-
-            .sidebar {
-                border-right: none;
-                border-bottom: 1px solid var(--line);
-            }
-
-            .composer-grid {
-                grid-template-columns: 1fr;
-            }
+            .app-container { margin: 0; height: 100vh; border-radius: 0; border: none; }
+            .sidebar { display: none; }
+            .message { max-width: 95%; }
         }
     </style>
 </head>
 <body>
-    <div class="app">
+<div class="app-container">
+
+    <header>
+        <div class="header-left">
+            <span class="status-dot" id="tableau-dot"></span>
+            <span>Tableau MCP Chat</span>
+        </div>
+        <div class="header-chips">
+            <div class="chip">
+                <span class="chip-dot" id="tableau-chip-dot"></span>
+                <span id="tableau-status">Tableau 未连接</span>
+            </div>
+            <div class="chip">
+                <span class="chip-dot" id="mcp-chip-dot"></span>
+                <span id="mcp-status">MCP 未连接</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div id="messages" class="chat-view"></div>
+
         <aside class="sidebar">
-            <h2 class="section-title">Dashboard Context</h2>
-            <div id="datasource-list" class="datasource-list">
-                <div class="datasource-card">
-                    <div class="mini">正在读取 dashboard 数据源...</div>
+            <div class="sidebar-section">
+                <h4>Dashboard Context</h4>
+                <div id="datasource-list">
+                    <div class="datasource-card">
+                        <div class="mini">正在读取数据源...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h4>Suggested Queries</h4>
+                <div>
+                    <div class="list-item" onclick="fillQuery(this)">
+                        <span>💡</span><span>每年每个 Segment 利润前十的产品</span>
+                    </div>
+                    <div class="list-item" onclick="fillQuery(this)">
+                        <span>💡</span><span>2025年与2024年东区利润对比及原因分析</span>
+                    </div>
+                    <div class="list-item" onclick="fillQuery(this)">
+                        <span>💡</span><span>利润率为负数的订单明细</span>
+                    </div>
+                    <div class="list-item" onclick="fillQuery(this)">
+                        <span>💡</span><span>各品类销售额和利润率汇总</span>
+                    </div>
                 </div>
             </div>
         </aside>
+    </main>
 
-        <section class="main">
-            <div class="header">
-                <h1 class="title">Tableau MCP Chat</h1>
-                <p class="subtitle">把问题、OpenAPI 说明、MCP tool 描述和当前 dashboard datasource metadata 一起交给 Gemini，让它像 Claude 那样自行规划和查询。</p>
-                <div class="status-row">
-                    <div class="chip">
-                        <span id="tableau-dot" class="dot"></span>
-                        <span id="tableau-status">Tableau 未连接</span>
-                    </div>
-                    <div class="chip">
-                        <span id="mcp-dot" class="dot"></span>
-                        <span id="mcp-status">MCP 未连接</span>
-                    </div>
-                </div>
-            </div>
-
-            <div id="messages" class="messages"></div>
-
-            <div class="composer">
-                <div class="composer-grid">
-                    <textarea id="prompt-input" placeholder="例如：查看每一年每个 Segment 的利润排名前十的产品"></textarea>
-                    <button id="send-btn" disabled>发送</button>
-                    <button id="clear-btn">新对话</button>
-                </div>
-            </div>
-        </section>
+    <div class="input-container">
+        <div class="input-box">
+            <input type="text" id="prompt-input" placeholder="向 AI 提问关于数据的问题...">
+        </div>
+        <button class="send-btn" id="send-btn" disabled>发送</button>
+        <button class="clear-btn" id="clear-btn">新对话</button>
     </div>
 
-    <script>
-        const messagesEl = document.getElementById('messages');
-        const datasourceList = document.getElementById('datasource-list');
-        const promptInput = document.getElementById('prompt-input');
-        const sendBtn = document.getElementById('send-btn');
-        const clearBtn = document.getElementById('clear-btn');
-        const tableauDot = document.getElementById('tableau-dot');
-        const tableauStatus = document.getElementById('tableau-status');
-        const mcpDot = document.getElementById('mcp-dot');
-        const mcpStatus = document.getElementById('mcp-status');
+</div>
 
-        let dashboardMetaPromise = null;
-        let currentDashboardMeta = [];
-        let chatHistory = [];
+<script>
+    const messagesEl      = document.getElementById('messages');
+    const datasourceList  = document.getElementById('datasource-list');
+    const promptInput     = document.getElementById('prompt-input');
+    const sendBtn         = document.getElementById('send-btn');
+    const clearBtn        = document.getElementById('clear-btn');
+    const tableauDot      = document.getElementById('tableau-dot');
+    const tableauChipDot  = document.getElementById('tableau-chip-dot');
+    const tableauStatus   = document.getElementById('tableau-status');
+    const mcpChipDot      = document.getElementById('mcp-chip-dot');
+    const mcpStatus       = document.getElementById('mcp-status');
 
-        function escapeHtml(value) {
-            return String(value ?? '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
+    let dashboardMetaPromise = null;
+    let currentDashboardMeta = [];
+    let chatHistory = [];
 
-        function formatDisplayValue(value) {
-            if (value === null || value === undefined) return '';
-            if (Array.isArray(value)) return value.map((item) => formatDisplayValue(item)).join(' | ');
-            if (typeof value === 'object') return Object.entries(value).map(([key, item]) => `${key}: ${formatDisplayValue(item)}`).join(', ');
-            return String(value);
-        }
+    // Table data store for CSV export
+    const tableDataStore = new Map();
+    let tableIdCounter = 0;
 
-        function collectHeaders(rows) {
-            if (!Array.isArray(rows) || !rows.length) return [];
-            const headers = [];
-            rows.forEach((row) => {
-                Object.keys(row || {}).forEach((key) => {
-                    if (!headers.includes(key)) headers.push(key);
-                });
-            });
-            return headers;
-        }
+    // ── Utilities ──────────────────────────────────────────────
 
-        function setChip(active, dotEl, textEl, text) {
-            dotEl.classList.toggle('active', active);
-            textEl.textContent = text;
-        }
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
-        function renderDatasourcePanel(items) {
-            if (!items.length) {
-                datasourceList.innerHTML = `
-                    <div class="datasource-card">
-                        <div class="mini">当前没有读取到 dashboard 数据源。</div>
-                    </div>
-                `;
-                return;
+    function renderMarkdown(text) {
+        if (!text) return '';
+        const lines = text.split('\n');
+        let html = '';
+        let inTable = false;
+        let tableHeaderParsed = false;
+        let tableHtml = '';
+        let inList = false;
+
+        const inlineEscape = (s) => escapeHtml(s)
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+        for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i];
+            const trimmed = raw.trim();
+
+            // ── Markdown table ──────────────────────────────
+            if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+                if (/^\|[\s\-:|]+\|$/.test(trimmed)) {
+                    // separator row — signals end of header
+                    tableHeaderParsed = true;
+                    continue;
+                }
+                if (!inTable) {
+                    inTable = true;
+                    tableHeaderParsed = false;
+                    if (inList) { html += '</ul>'; inList = false; }
+                    tableHtml = '<div class="md-table-wrap"><table class="md-table">';
+                }
+                const cells = trimmed.slice(1, -1).split('|').map(c => c.trim());
+                if (!tableHeaderParsed) {
+                    tableHtml += '<thead><tr>' + cells.map(c => `<th>${inlineEscape(c)}</th>`).join('') + '</tr></thead><tbody>';
+                } else {
+                    tableHtml += '<tr>' + cells.map(c => `<td>${inlineEscape(c)}</td>`).join('') + '</tr>';
+                }
+                continue;
+            } else if (inTable) {
+                tableHtml += '</tbody></table></div>';
+                html += tableHtml;
+                tableHtml = '';
+                inTable = false;
+                tableHeaderParsed = false;
             }
 
-            datasourceList.innerHTML = items.map((item) => `
-                <div class="datasource-card">
-                    <div class="datasource-name">${escapeHtml(item.datasourceName)}</div>
-                    <div class="mini">Worksheet: ${escapeHtml(item.worksheetName)}</div>
-                    <div class="mini">Fields: ${escapeHtml((item.fields || []).slice(0, 8).join(', '))}${(item.fields || []).length > 8 ? '...' : ''}</div>
-                </div>
-            `).join('');
+            // ── Bullet list ─────────────────────────────────
+            if (/^[*\-]\s+/.test(trimmed)) {
+                if (!inList) { html += '<ul>'; inList = true; }
+                html += `<li>${inlineEscape(trimmed.replace(/^[*\-]\s+/, ''))}</li>`;
+                continue;
+            } else if (inList) {
+                html += '</ul>';
+                inList = false;
+            }
+
+            // ── Regular line ─────────────────────────────────
+            if (trimmed === '') {
+                html += '<br>';
+            } else {
+                html += `<p>${inlineEscape(trimmed)}</p>`;
+            }
         }
 
-        function renderTable(rows) {
-            if (!Array.isArray(rows) || !rows.length) return '';
-            const headers = collectHeaders(rows);
-            return `
-                <div class="table-shell">
-                    <div class="table-meta">
-                        <span>${rows.length} rows</span>
-                        <span>结果表</span>
-                    </div>
-                    <div class="table-wrapper">
-                        <table>
-                            <thead>
-                                <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
-                            </thead>
-                            <tbody>
-                                ${rows.map((row) => `
-                                    <tr>
-                                        ${headers.map((header) => {
-                                            const value = formatDisplayValue(row[header]);
-                                            return `<td title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
-                                        }).join('')}
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-        }
+        // close open tags
+        if (inTable) { tableHtml += '</tbody></table></div>'; html += tableHtml; }
+        if (inList) { html += '</ul>'; }
 
-        function renderAudit(audit) {
-            if (!Array.isArray(audit) || !audit.length) return '';
-            return `
-                <details class="message-block">
-                    <summary>执行轨迹</summary>
+        return html;
+    }
+
+    function formatDisplayValue(value) {
+        if (value === null || value === undefined) return '';
+        if (Array.isArray(value)) return value.map(item => formatDisplayValue(item)).join(' | ');
+        if (typeof value === 'object') return Object.entries(value).map(([k, v]) => `${k}: ${formatDisplayValue(v)}`).join(', ');
+        return String(value);
+    }
+
+    function isNegativeNumber(value) {
+        return typeof value === 'number' && value < 0;
+    }
+
+    function collectHeaders(rows) {
+        if (!Array.isArray(rows) || !rows.length) return [];
+        const headers = [];
+        rows.forEach(row => {
+            Object.keys(row || {}).forEach(key => {
+                if (!headers.includes(key)) headers.push(key);
+            });
+        });
+        return headers;
+    }
+
+    function fillQuery(el) {
+        promptInput.value = el.querySelector('span:last-child').textContent;
+        promptInput.focus();
+    }
+
+    // ── Status chips ───────────────────────────────────────────
+
+    function setChip(active, dotEl, textEl, text) {
+        dotEl.classList.toggle('active', active);
+        textEl.textContent = text;
+    }
+
+    // ── CSV Export ─────────────────────────────────────────────
+
+    function exportCSV(tableId) {
+        const rows = tableDataStore.get(tableId);
+        if (!rows || !rows.length) return;
+        const headers = collectHeaders(rows);
+        let csv = headers.map(h => `"${h}"`).join(',') + '\r\n';
+        rows.forEach(row => {
+            csv += headers.map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\r\n';
+        });
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `export_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ── Render helpers ─────────────────────────────────────────
+
+    function renderTable(rows) {
+        if (!Array.isArray(rows) || !rows.length) return '';
+        const headers = collectHeaders(rows);
+        const id = `tbl-${++tableIdCounter}`;
+        tableDataStore.set(id, rows);
+
+        const thead = `<tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+        const tbody = rows.map(row => `
+            <tr>${headers.map(h => {
+                const raw = row[h];
+                const display = formatDisplayValue(raw);
+                const cls = isNegativeNumber(raw) ? ' class="negative"' : '';
+                return `<td${cls} title="${escapeHtml(display)}">${escapeHtml(display)}</td>`;
+            }).join('')}</tr>
+        `).join('');
+
+        return `
+            <div class="data-card">
+                <div class="card-header">
+                    <span class="card-title">${rows.length} 行数据</span>
+                    <button class="download-btn" onclick="exportCSV('${id}')">📥 导出 CSV</button>
+                </div>
+                <div class="table-container">
+                    <table><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderAudit(audit) {
+        if (!Array.isArray(audit) || !audit.length) return '';
+        return `
+            <div class="audit-wrapper">
+                <details>
+                    <summary>▶ 执行轨迹（${audit.length} 步）</summary>
                     <div class="audit-list">
-                        ${audit.map((item) => `
+                        ${audit.map(item => `
                             <div class="audit-item">
                                 <div class="audit-step">${escapeHtml(item.step)}</div>
                                 <div class="audit-details">${escapeHtml(item.details)}</div>
@@ -492,151 +678,171 @@
                         `).join('')}
                     </div>
                 </details>
-            `;
-        }
+            </div>
+        `;
+    }
 
-        function appendMessage(message) {
-            const wrapper = document.createElement('div');
-            wrapper.className = `message ${message.role}`;
-            wrapper.innerHTML = `
-                <div class="message-role">${message.role === 'user' ? 'User' : 'Assistant'}</div>
-                <div class="message-text">${escapeHtml(message.content || '')}</div>
-                ${message.data?.length ? `<div class="message-block">${renderTable(message.data)}</div>` : ''}
-                ${renderAudit(message.audit)}
-            `;
-            messagesEl.appendChild(wrapper);
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
+    function appendMessage(message) {
+        const wrapper = document.createElement('div');
+        wrapper.className = `message ${message.role}`;
+        wrapper.innerHTML = `
+            <div class="message-text${message.error ? ' error-text' : ''}">${message.error ? escapeHtml(message.content || '') : renderMarkdown(message.content || '')}</div>
+            ${message.data?.length ? renderTable(message.data) : ''}
+            ${renderAudit(message.audit)}
+        `;
+        messagesEl.appendChild(wrapper);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
 
-        function resetConversation() {
-            chatHistory = [];
-            messagesEl.innerHTML = '';
-            appendMessage({
-                role: 'assistant',
-                content: '准备好了。你可以直接问业务问题，我会结合 OpenAPI、MCP tool 描述和当前 dashboard metadata 来查询。'
-            });
-        }
-
-        async function extractDashboardMeta() {
-            const dashboard = tableau.extensions.dashboardContent.dashboard;
-            const groups = await Promise.all(
-                dashboard.worksheets.map(async (worksheet) => {
-                    const datasources = await worksheet.getDataSourcesAsync();
-                    return datasources.map((datasource) => ({
-                        worksheetName: worksheet.name,
-                        datasourceName: datasource.name,
-                        localId: datasource.id,
-                        fields: (datasource.fields || []).map((field) => field.name)
-                    }));
-                })
-            );
-            return groups.flat();
-        }
-
-        async function loadDashboardMeta() {
-            if (dashboardMetaPromise) return dashboardMetaPromise;
-
-            dashboardMetaPromise = extractDashboardMeta()
-                .then((items) => {
-                    currentDashboardMeta = items;
-                    renderDatasourcePanel(items);
-                    return items;
-                })
-                .finally(() => {
-                    dashboardMetaPromise = null;
-                });
-
-            return dashboardMetaPromise;
-        }
-
-        async function refreshMcpStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const json = await response.json();
-                if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
-                setChip(true, mcpDot, mcpStatus, `MCP 已连接 · ${json.toolCount} tools`);
-                return true;
-            } catch (error) {
-                setChip(false, mcpDot, mcpStatus, `MCP 连接失败: ${error.message}`);
-                return false;
-            }
-        }
-
-        async function initialize() {
-            const mcpReady = await refreshMcpStatus();
-
-            try {
-                await tableau.extensions.initializeAsync();
-                setChip(true, tableauDot, tableauStatus, 'Tableau 已连接');
-                await loadDashboardMeta();
-                tableau.extensions.dashboardContent.dashboard.worksheets.forEach((worksheet) => {
-                    worksheet.addEventListener(tableau.TableauEventType.FilterChanged, () => {
-                        loadDashboardMeta().catch((error) => console.error('Failed to refresh dashboard metadata', error));
-                    });
-                });
-                sendBtn.disabled = !mcpReady;
-            } catch (error) {
-                setChip(false, tableauDot, tableauStatus, `Tableau 初始化失败: ${error.message}`);
-                sendBtn.disabled = true;
-            }
-
-            resetConversation();
-        }
-
-        async function sendMessage() {
-            const content = promptInput.value.trim();
-            if (!content) return;
-
-            appendMessage({ role: 'user', content });
-            chatHistory.push({ role: 'user', content });
-            promptInput.value = '';
-            sendBtn.disabled = true;
-
-            try {
-                await loadDashboardMeta();
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: content,
-                        history: chatHistory.slice(-8),
-                        dashboardMeta: currentDashboardMeta
-                    })
-                });
-                const json = await response.json();
-                if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
-
-                const assistantMessage = {
-                    role: 'assistant',
-                    content: json.message || 'No response returned.',
-                    data: Array.isArray(json.data) ? json.data : [],
-                    audit: Array.isArray(json.audit) ? json.audit : []
-                };
-
-                appendMessage(assistantMessage);
-                chatHistory.push({ role: 'assistant', content: assistantMessage.content });
-            } catch (error) {
-                appendMessage({
-                    role: 'assistant',
-                    content: `请求失败：${error.message}`
-                });
-                chatHistory.push({ role: 'assistant', content: `请求失败：${error.message}` });
-            } finally {
-                sendBtn.disabled = false;
-                promptInput.focus();
-            }
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        clearBtn.addEventListener('click', resetConversation);
-        promptInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
+    function resetConversation() {
+        chatHistory = [];
+        messagesEl.innerHTML = '';
+        appendMessage({
+            role: 'assistant',
+            content: '准备好了。你可以直接问业务问题，我会结合 MCP tool 和当前 dashboard 数据源来查询。'
         });
+    }
 
-        initialize();
-    </script>
+    // ── Sidebar: Dashboard Context ─────────────────────────────
+
+    function renderDatasourcePanel(items) {
+        if (!items.length) {
+            datasourceList.innerHTML = `<div class="datasource-card"><div class="mini">未找到数据源。</div></div>`;
+            return;
+        }
+        datasourceList.innerHTML = items.map(item => `
+            <div class="datasource-card">
+                <div class="datasource-name">${escapeHtml(item.datasourceName)}</div>
+                <div class="mini">📊 ${escapeHtml(item.worksheetName)}</div>
+                <div class="mini" style="margin-top:4px;word-break:break-all;color:#94A3B8;">id: ${escapeHtml(item.localId || '—')}</div>
+                ${(item.fields || []).length ? `
+                    <div class="field-list">
+                        ${(item.fields || []).slice(0, 10).map(f => `<span class="field-item">${escapeHtml(f)}</span>`).join('')}
+                        ${(item.fields || []).length > 10 ? `<span class="field-item">+${(item.fields || []).length - 10}</span>` : ''}
+                    </div>
+                ` : ''}
+            </div>
+        `).join('');
+    }
+
+    // ── Tableau Extension init ─────────────────────────────────
+
+    async function extractDashboardMeta() {
+        const dashboard = tableau.extensions.dashboardContent.dashboard;
+        const groups = await Promise.all(
+            dashboard.worksheets.map(async worksheet => {
+                const datasources = await worksheet.getDataSourcesAsync();
+                return datasources.map(datasource => ({
+                    worksheetName: worksheet.name,
+                    datasourceName: datasource.name,
+                    localId: datasource.id,
+                    fields: (datasource.fields || []).map(field => field.name)
+                }));
+            })
+        );
+        return groups.flat();
+    }
+
+    async function loadDashboardMeta() {
+        if (dashboardMetaPromise) return dashboardMetaPromise;
+        dashboardMetaPromise = extractDashboardMeta()
+            .then(items => {
+                currentDashboardMeta = items;
+                renderDatasourcePanel(items);
+                return items;
+            })
+            .finally(() => { dashboardMetaPromise = null; });
+        return dashboardMetaPromise;
+    }
+
+    async function refreshMcpStatus() {
+        try {
+            const response = await fetch('/api/status');
+            const json = await response.json();
+            if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
+            setChip(true, mcpChipDot, mcpStatus, `MCP 已连接 · ${json.toolCount} tools`);
+            return true;
+        } catch (error) {
+            setChip(false, mcpChipDot, mcpStatus, `MCP 连接失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    async function initialize() {
+        const mcpReady = await refreshMcpStatus();
+        try {
+            await tableau.extensions.initializeAsync();
+            tableauDot.classList.add('active');
+            setChip(true, tableauChipDot, tableauStatus, 'Tableau 已连接');
+            await loadDashboardMeta();
+            tableau.extensions.dashboardContent.dashboard.worksheets.forEach(worksheet => {
+                worksheet.addEventListener(tableau.TableauEventType.FilterChanged, () => {
+                    loadDashboardMeta().catch(err => console.error('Failed to refresh dashboard metadata', err));
+                });
+            });
+            sendBtn.disabled = !mcpReady;
+        } catch (error) {
+            setChip(false, tableauChipDot, tableauStatus, `Tableau 初始化失败: ${error.message}`);
+            sendBtn.disabled = true;
+        }
+        resetConversation();
+    }
+
+    // ── Send message ───────────────────────────────────────────
+
+    async function sendMessage() {
+        const content = promptInput.value.trim();
+        if (!content) return;
+
+        appendMessage({ role: 'user', content });
+        chatHistory.push({ role: 'user', content });
+        promptInput.value = '';
+        sendBtn.disabled = true;
+
+        try {
+            await loadDashboardMeta();
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: content,
+                    history: chatHistory.slice(-8),
+                    dashboardMeta: currentDashboardMeta
+                })
+            });
+            const json = await response.json();
+            if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
+
+            const assistantMessage = {
+                role: 'assistant',
+                content: json.message || 'No response returned.',
+                data: Array.isArray(json.data) ? json.data : [],
+                audit: Array.isArray(json.audit) ? json.audit : []
+            };
+
+            appendMessage(assistantMessage);
+            chatHistory.push({ role: 'assistant', content: assistantMessage.content });
+        } catch (error) {
+            appendMessage({ role: 'assistant', content: `请求失败：${error.message}`, error: true });
+            chatHistory.push({ role: 'assistant', content: `请求失败：${error.message}` });
+        } finally {
+            sendBtn.disabled = false;
+            promptInput.focus();
+        }
+    }
+
+    // ── Event listeners ────────────────────────────────────────
+
+    sendBtn.addEventListener('click', sendMessage);
+    clearBtn.addEventListener('click', resetConversation);
+    promptInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+
+    initialize();
+</script>
 </body>
 </html>

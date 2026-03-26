@@ -202,6 +202,7 @@ function extractMetadataRecords(metadataPayload) {
     if (Array.isArray(metadataPayload)) return metadataPayload;
     if (Array.isArray(metadataPayload.fields)) return metadataPayload.fields;
     if (Array.isArray(metadataPayload.data)) return metadataPayload.data;
+    if (Array.isArray(metadataPayload?.data?.data)) return metadataPayload.data.data;
     if (Array.isArray(metadataPayload?.result?.fields)) return metadataPayload.result.fields;
     if (Array.isArray(metadataPayload?.result?.data)) return metadataPayload.result.data;
     if (Array.isArray(metadataPayload?.metadata?.fields)) return metadataPayload.metadata.fields;
@@ -256,6 +257,7 @@ function extractTaggedData(text) {
     let data = [];
 
     // 按 [DATA]...[/DATA] 块分割，同时捕获每块前面最近的标题行作为分组标签
+    const blockCount = (rawText.match(/\[DATA\]/gi) || []).length;
     const blockRegex = /([^\n]*)\n?\[DATA\]([\s\S]*?)\[\/DATA\]/gi;
     let match;
 
@@ -265,8 +267,8 @@ function extractTaggedData(text) {
         try {
             const parsed = JSON.parse(rawJson);
             if (Array.isArray(parsed)) {
-                // 把标题注入到每一行，方便表格展示
-                const enriched = label
+                // 只在多个 [DATA] 块时才注入 _group，避免单块时产生噪音
+                const enriched = (label && blockCount > 1)
                     ? parsed.map(row => ({ _group: label, ...row }))
                     : parsed;
                 data = data.concat(enriched);
@@ -421,11 +423,18 @@ function buildSystemInstruction() {
         'You are a Tableau data assistant working through MCP tools.',
         'Your job is to answer the user accurately by using datasource metadata and MCP tool descriptions.',
         'Always prefer runtime MCP tool schemas and descriptions over any static document if they differ.',
+        'All available datasource metadata is pre-loaded in the prompt under "Available datasources". Do NOT call list-datasources or get-datasource-metadata — use the datasourceLuid and field information already provided.',
         'Never invent fields, datasource ids, or results.',
         'Use only fields that exist in metadata.',
         'For measures, include a function when the schema requires one.',
         'If the question asks for explanations or reasons, gather enough evidence first and make it clear when a reason is an inference from the data.',
         'When answering with tabular results, end with [DATA]...[/DATA] containing a valid JSON array.',
+        '',
+        'STRATEGY FOR MULTI-QUERY MERGED RESULTS:',
+        'When your analysis involves multiple separate queries that together form a complete picture (e.g., year-over-year comparison, multi-dimension breakdown):',
+        '  - In your final [DATA] block, output the COMPLETE merged/computed table — not just the last raw query result.',
+        '  - Example: if you queried 2024 profit and 2025 profit separately, your [DATA] should contain rows with columns for both years and the delta, like: [{"Category": "Technology", "2024利润": 10156, "2025利润": 7288, "变化": -2868}]',
+        '  - The [DATA] block should mirror what you present in your text analysis, so the user can export the complete comparison as CSV.',
         '',
         'STRATEGY FOR TOP-N PER GROUP QUERIES:',
         'When the user asks for "top N per group" (e.g., top 10 products per year per segment):',
@@ -443,7 +452,13 @@ function buildSystemInstruction() {
     ].join('\n');
 }
 
-function buildUserPrompt({ message, history, toolSummary, datasourceMatches, selectedDatasource, metadataSummary }) {
+function buildUserPrompt({ message, history, toolSummary, datasourceContexts }) {
+    const datasourceSection = datasourceContexts.length > 0
+        ? datasourceContexts.map(ds =>
+            `### ${ds.name}\ndatasourceLuid: "${ds.luid}" (match score: ${ds.score.toFixed(2)})\n${ds.summary}`
+          ).join('\n\n---\n\n')
+        : 'No datasources matched from the dashboard context. Call list-datasources to find available datasources.';
+
     return [
         'Conversation history:',
         summarizeHistory(history),
@@ -451,18 +466,13 @@ function buildUserPrompt({ message, history, toolSummary, datasourceMatches, sel
         'Runtime MCP tool guide:',
         toolSummary,
         '',
-        'Dashboard datasource matching context:',
-        summarizeMatches(datasourceMatches),
-        '',
-        `Selected datasource for grounding: ${selectedDatasource ? `${selectedDatasource.matchedName} — datasourceLuid="${selectedDatasource.luid}" (use this luid directly, do not call get-datasource-metadata without it)` : 'None yet — call list-datasources first to get the luid before calling get-datasource-metadata'}`,
-        '',
-        'Datasource metadata summary:',
-        metadataSummary,
+        'Available datasources (matched from current dashboard):',
+        datasourceSection,
         '',
         'Task instructions:',
-        '- Start from the user question below.',
-        '- If needed, call list-datasources, get-datasource-metadata, list-supported-functions, query-datasource, or other runtime tools.',
-        '- Prefer the selected datasource above when it fits the dashboard context.',
+        '- Metadata for all available datasources is already provided above — do NOT call list-datasources or get-datasource-metadata.',
+        '- Use the datasourceLuid shown above directly when calling query-datasource.',
+        '- Choose the most appropriate datasource based on the user question.',
         '- If you need to explain why a metric changed, fetch enough supporting metrics before concluding.',
         '',
         `User question: ${message}`
@@ -507,13 +517,24 @@ app.post('/api/chat', async (req, res) => {
 
         const dashboardDatasources = resolveDashboardDatasourceContext(dashboardMeta);
         const datasourceMatches = pickBestDatasourceMatches(dashboardDatasources, mcpDatasources);
-        const selectedDatasource = datasourceMatches.find((item) => item.best?.luid)?.best || null;
 
-        let metadataSummary = 'No datasource metadata loaded yet.';
-        if (selectedDatasource?.luid) {
-            const metadata = await readDatasourceMetadata(selectedDatasource.luid);
-            metadataSummary = summarizeMetadata(metadata);
-        }
+        // 所有 score >= 0.5 的匹配，按 score 降序排列
+        const matchedDatasources = datasourceMatches
+            .filter(item => item.best?.luid && item.best.score >= 0.5)
+            .sort((a, b) => b.best.score - a.best.score)
+            .map(item => item.best);
+
+        // 并行取所有匹配数据源的 metadata
+        const datasourceContexts = await Promise.all(
+            matchedDatasources.map(async ds => {
+                try {
+                    const metadata = await readDatasourceMetadata(ds.luid);
+                    return { name: ds.matchedName, luid: ds.luid, score: ds.score, summary: summarizeMetadata(metadata) };
+                } catch (err) {
+                    return { name: ds.matchedName, luid: ds.luid, score: ds.score, summary: `Failed to load metadata: ${err.message}` };
+                }
+            })
+        );
 
         const model = getModel(buildSystemInstruction());
         const chat = model.startChat({ tools: convertToGeminiTools(mcpTools) });
@@ -521,9 +542,7 @@ app.post('/api/chat', async (req, res) => {
             message,
             history,
             toolSummary: summarizeTools(mcpTools),
-            datasourceMatches,
-            selectedDatasource,
-            metadataSummary
+            datasourceContexts
         });
 
         console.log('\n' + '='.repeat(60));
@@ -548,8 +567,11 @@ app.post('/api/chat', async (req, res) => {
                     console.log('[Turn ${turnCount}] 重试次数超限，退出循环');
                     break;
                 }
+                const luidsHint = datasourceContexts.length
+                    ? `Available datasources: ${datasourceContexts.map(d => `"${d.name}" luid="${d.luid}"`).join(', ')}.`
+                    : '';
                 result = await chat.sendMessage(
-                    `Your last function call response was malformed. Please retry with at most 4 tool calls at a time. Remember, the user asked: "${userMessage}". Continue working on this task — do not ask the user to repeat themselves.`
+                    `Your last function call was malformed. Retry with at most 4 tool calls at a time. ${luidsHint} The user asked: "${message}". Continue working — do not ask the user to repeat themselves.`
                 );
                 response = result.response;
                 continue;
@@ -641,8 +663,7 @@ app.post('/api/chat', async (req, res) => {
             message: plainMessage,
             data: finalData,
             audit,
-            selectedDatasource,
-            datasourceMatches
+            datasourceContexts
         });
     } catch (error) {
         console.error('Chat API error:', error);
