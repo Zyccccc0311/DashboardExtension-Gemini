@@ -279,18 +279,6 @@ function summarizeTools(mcpTools) {
     }).join('\n');
 }
 
-function summarizeMatches(matches) {
-    if (!matches.length) return 'No dashboard datasource context was provided.';
-    return matches.map((item) => {
-        const best = item.best
-            ? `${item.best.matchedName} (${item.best.luid}) score=${item.best.score.toFixed(3)}`
-            : 'No match';
-        const alternatives = item.alternatives.length
-            ? item.alternatives.map((candidate) => `${candidate.matchedName} (${candidate.luid}) score=${candidate.score.toFixed(3)}`).join(' | ')
-            : 'None';
-        return `- Dashboard datasource "${item.dashboardDatasource.datasourceName}" -> best match: ${best}; alternatives: ${alternatives}`;
-    }).join('\n');
-}
 
 function summarizeHistory(history = []) {
     if (!Array.isArray(history) || history.length === 0) return 'No prior conversation.';
@@ -644,7 +632,7 @@ app.post('/api/chat', async (req, res) => {
                 malformedRetries += 1;
                 console.log(`\n[Turn ${turnCount}] ⚠️  MALFORMED_FUNCTION_CALL (第${malformedRetries}次) — 发送重试提示`);
                 if (malformedRetries > 3) {
-                    console.log('[Turn ${turnCount}] 重试次数超限，退出循环');
+                    console.log(`[Turn ${turnCount}] 重试次数超限，退出循环`);
                     break;
                 }
                 const luidsHint = datasourceContexts.length

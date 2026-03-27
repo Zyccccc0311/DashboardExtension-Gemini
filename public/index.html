@@ -698,6 +698,8 @@
     function resetConversation() {
         chatHistory = [];
         messagesEl.innerHTML = '';
+        tableDataStore.clear();
+        tableIdCounter = 0;
         appendMessage({
             role: 'assistant',
             content: '准备好了。你可以直接问业务问题，我会结合 MCP tool 和当前 dashboard 数据源来查询。'
