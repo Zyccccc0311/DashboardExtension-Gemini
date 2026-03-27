@@ -15,7 +15,7 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isWindows = platform() === 'win32';
 const PORT = Number(process.env.PORT || 8080);
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 const OPENAPI_PATH = process.env.VDS_OPENAPI_PATH || 'C:\\Users\\zyc20\\Downloads\\openapi.json';
 
 const app = express();
@@ -103,11 +103,11 @@ function buildExecuteCodeTool() {
             properties: {
                 code: {
                     type: 'string',
-                    description: 'JavaScript expression or function body. Access all stored query results via the `datasets` object (keyed by datasetKey). Must return a value.'
+                    description: 'REQUIRED. The JavaScript code to execute (NOT a description). Must contain actual code with a return statement. Example: "const m = new Map(datasets[\\"dataset_1\\"].map(r=>[r[\\"Product Name\\"],r])); return datasets[\\"dataset_2\\"].filter(r=>m.has(r[\\"Product Name\\"]));"'
                 },
                 description: {
                     type: 'string',
-                    description: 'One-line description of what this code does.'
+                    description: 'A short plain-English summary of what the code does (NOT the code itself). Example: "Filter dataset_2 to rows whose Product Name also appears in dataset_1"'
                 }
             },
             required: ['code']
@@ -309,7 +309,10 @@ function extractTaggedData(text) {
 
     while ((match = blockRegex.exec(rawText)) !== null) {
         const label = match[1].replace(/[*#`]/g, '').trim(); // 清理 markdown 符号
-        const rawJson = match[2].replace(/```json/gi, '').replace(/```/g, '').trim();
+        const rawJson = match[2]
+            .replace(/```json/gi, '').replace(/```/g, '')
+            .replace(/,?\s*\.\.\.[^\]}\n]*/g, '')  // 去掉 Gemini 插入的 "... (更多记录)" 截断标记
+            .trim();
         try {
             const parsed = JSON.parse(rawJson);
             if (Array.isArray(parsed)) {
@@ -485,15 +488,21 @@ function buildSystemInstruction() {
         'DATA PROCESSING WITH execute-code:',
         'When a query returns >200 rows, or when you need to join/intersect/filter multiple query results, use the execute-code tool instead of reasoning in your head.',
         '  - Every query-datasource response includes a "datasetKey" (e.g. "dataset_1") and "rowCount".',
+        '  - execute-code results are ALSO stored in queryStore with a new datasetKey — so you can chain multiple execute-code calls.',
         '  - Reference data in code via: datasets["dataset_1"]',
+        '  - CRITICAL FIELD USAGE — the execute-code tool has TWO fields:',
+        '      "code": PUT YOUR JAVASCRIPT CODE HERE. Must contain actual JS with a return statement.',
+        '      "description": Put a short plain-English summary here (e.g. "Filter to profitable products").',
+        '    NEVER put code in the "description" field. NEVER put plain text in the "code" field.',
         '  - Example for cross-year intersection:',
-        '      const m2023 = new Map(datasets["dataset_1"].map(r => [r["Product Name"], r]));',
-        '      return datasets["dataset_2"].filter(r => m2023.has(r["Product Name"]) && r["利润率"] > 0.1);',
+        '      code: "const m2023 = new Map(datasets[\\"dataset_1\\"].map(r => [r[\\"Product Name\\"], r])); return datasets[\\"dataset_2\\"].filter(r => m2023.has(r[\\"Product Name\\"]) && r[\\"利润率\\"] > 0.1);"',
+        '      description: "Intersect dataset_1 and dataset_2 on Product Name where profit ratio > 10%"',
         '  - IMPORTANT: When your code returns results, include ALL relevant columns from the source datasets — not just the identifier field.',
         '    For example, if finding products that meet a criterion across years, return each product with its profit, sales, profit ratio for EACH year as separate columns.',
         '    Bad:  return [{产品名称: "X", year: 2023}, ...]',
         '    Good: return [{产品名称: "X", 利润_2023: 100, 销售额_2023: 500, 利润率_2023: 0.20, 利润_2024: 150, 销售额_2024: 600, 利润率_2024: 0.25}, ...]',
         '  - After execute-code returns, use the result to write your final answer and [DATA] block.',
+        '  - IMPORTANT: When writing the final [DATA] block, output ALL rows from the execute-code result — never truncate with "..." or "(more records)". The [DATA] block must be valid JSON that parses completely.',
         '  - Do NOT attempt to filter or intersect large datasets mentally — always delegate to execute-code.',
         '',
         'SUPPORTING METRICS RULE:',
@@ -619,7 +628,8 @@ app.post('/api/chat', async (req, res) => {
         let result = await chat.sendMessage(prompt);
         let response = result.response;
         const audit = [];
-        let lastQueryData = [];
+        let lastQueryData = [];   // 最近一次 query-datasource 的原始数据
+        let lastCodeData = [];    // 最近一次 execute-code 返回 >1 行的处理结果
         let turnCount = 0;
         let malformedRetries = 0;
 
@@ -678,16 +688,35 @@ app.post('/api/chat', async (req, res) => {
                     const { code, description } = call.args ?? {};
                     const datasets = Object.fromEntries(queryStore);
                     console.log(`    [execute-code] ${description || ''} | datasets: [${[...queryStore.keys()].join(', ')}]`);
-                    const execResult = executeCodeSandbox(code, datasets);
-                    if (execResult.ok) {
-                        const rows = Array.isArray(execResult.result) ? execResult.result : [{ result: String(execResult.result) }];
-                        parsedResponse = { data: rows, rowCount: rows.length };
-                        lastQueryData = rows;
-                        console.log(`    结果: ✅ OK | ${rows.length} 行`);
-                    } else {
+
+                    // 检测 code 字段为空（常见错误：Gemini 把代码放进了 description）
+                    if (!code || typeof code !== 'string' || !code.trim()) {
                         isError = true;
-                        parsedResponse = { error: execResult.error };
-                        console.log(`    结果: ❌ ERROR | ${execResult.error}`);
+                        parsedResponse = { error: 'The "code" field is empty or missing. You MUST put your JavaScript code in the "code" field. The "description" field is for a plain-English one-line summary only (NOT code). Please retry with the JavaScript code in the "code" field.' };
+                        console.log(`    结果: ❌ ERROR | code field empty — Gemini likely put code in description`);
+                    } else {
+                        const execResult = executeCodeSandbox(code, datasets);
+                        if (execResult.ok) {
+                            const rows = Array.isArray(execResult.result) ? execResult.result : [{ result: String(execResult.result) }];
+                            // 存入 queryStore，支持后续 execute-code 链式引用
+                            queryStoreCounter++;
+                            const datasetKey = `dataset_${queryStoreCounter}`;
+                            queryStore.set(datasetKey, rows);
+                            // execute-code 处理后的数据（>1行）单独记录，供最终输出选择
+                            if (rows.length > 1) lastCodeData = rows;
+                            // 同样只把摘要发回 Gemini
+                            parsedResponse = {
+                                datasetKey,
+                                rowCount: rows.length,
+                                sampleRows: rows.slice(0, 3),
+                                note: `Results stored as ${datasetKey} (${rows.length} rows). Use datasets["${datasetKey}"] in further execute-code calls, or output all rows in your final [DATA] block.`
+                            };
+                            console.log(`    结果: ✅ OK | ${rows.length} 行 → 存储为 ${datasetKey}`);
+                        } else {
+                            isError = true;
+                            parsedResponse = { error: execResult.error };
+                            console.log(`    结果: ❌ ERROR | ${execResult.error}`);
+                        }
                     }
                 } else {
                     // 普通 MCP 调用
@@ -698,15 +727,21 @@ app.post('/api/chat', async (req, res) => {
                     const resultPreview = JSON.stringify(parsedResponse).slice(0, 300);
                     console.log(`    结果: ${isError ? '❌ ERROR' : '✅ OK'} | ${resultPreview}${resultPreview.length >= 300 ? '...(truncated)' : ''}`);
 
-                    // query-datasource 成功时存入 queryStore，附加 datasetKey 给 Gemini
+                    // query-datasource 成功时存入 queryStore，只把摘要发回给 Gemini（避免大量 token）
                     if (call.name === 'query-datasource' && !isError && Array.isArray(parsedResponse?.data)) {
                         queryStoreCounter++;
                         const datasetKey = `dataset_${queryStoreCounter}`;
-                        queryStore.set(datasetKey, parsedResponse.data);
-                        parsedResponse.datasetKey = datasetKey;
-                        parsedResponse.rowCount = parsedResponse.data.length;
-                        lastQueryData = parsedResponse.data;
-                        console.log(`    数据行数: ${parsedResponse.data.length} → 存储为 ${datasetKey}`);
+                        const fullData = parsedResponse.data;
+                        queryStore.set(datasetKey, fullData);
+                        lastQueryData = fullData;  // query-datasource 始终更新原始数据
+                        console.log(`    数据行数: ${fullData.length} → 存储为 ${datasetKey}`);
+                        // 发回 Gemini 的只有 datasetKey + rowCount + 3 行样本，完整数据留在服务端
+                        parsedResponse = {
+                            datasetKey,
+                            rowCount: fullData.length,
+                            sampleRows: fullData.slice(0, 3),
+                            note: `Full data stored as ${datasetKey} (${fullData.length} rows). Use execute-code with datasets["${datasetKey}"] to process it.`
+                        };
                     }
                 }
 
@@ -755,7 +790,12 @@ app.post('/api/chat', async (req, res) => {
         console.log('='.repeat(60) + '\n');
 
         const tagged = extractTaggedData(finalText);
-        const finalData = normalizeFinalData(tagged.data.length ? tagged.data : lastQueryData);
+        // 优先级：[DATA]（Gemini 亲手写的完整表格）> lastCodeData（execute-code 处理结果）> lastQueryData（原始查询）
+        // [DATA] 只有在行数 >= lastCodeData 时才优先（防止 Gemini 只写样本或引用代码的情况）
+        const bestFallback = lastCodeData.length > 0 ? lastCodeData : lastQueryData;
+        const finalData = normalizeFinalData(
+            tagged.data.length >= bestFallback.length ? tagged.data : bestFallback
+        );
         const plainMessage = stripHtmlTags(tagged.plainText || finalText || 'No response text returned.');
 
         res.json({

@@ -685,8 +685,9 @@
     function appendMessage(message) {
         const wrapper = document.createElement('div');
         wrapper.className = `message ${message.role}`;
+        const displayContent = (message.content || '').replace(/\[DATA\][\s\S]*?\[\/DATA\]/g, '').trim();
         wrapper.innerHTML = `
-            <div class="message-text${message.error ? ' error-text' : ''}">${message.error ? escapeHtml(message.content || '') : renderMarkdown(message.content || '')}</div>
+            <div class="message-text${message.error ? ' error-text' : ''}">${message.error ? escapeHtml(displayContent) : renderMarkdown(displayContent)}</div>
             ${message.data?.length ? renderTable(message.data) : ''}
             ${renderAudit(message.audit)}
         `;

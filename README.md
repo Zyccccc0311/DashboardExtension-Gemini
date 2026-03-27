@@ -142,6 +142,14 @@ This version fully rebuilds the AI query capability from scratch:
 - **Execution trace UI**: the frontend displays each tool call's name, arguments, status, and row count
 - **Error recovery**: auto-retry on `MALFORMED_FUNCTION_CALL` (with original question preserved), fallback summary prompt on empty response, automatic MCP reconnection on startup failure
 
+### Latest Updates
+
+- **`execute-code` virtual tool** — Gemini can now write JavaScript to process query results server-side (Node.js `vm` sandbox). Handles large datasets and cross-query operations (e.g. set intersections, consecutive-year analysis) that exceed LLM context limits
+- **`queryStore` persistence** — Results from both `query-datasource` and `execute-code` are stored server-side by key (`dataset_1`, `dataset_2`...) and passed to the sandbox, enabling multi-step chained computations
+- **Tool response truncation** — Only 3 sample rows + metadata are sent back to Gemini per query result (full data stays in `queryStore`). Prevents 429/503 token quota errors on large datasets
+- **Smart final data selection** — Final output prefers `execute-code` processed results over raw query data, ensuring the correct filtered/aggregated rows are shown in the table
+- **`[DATA]` block hidden from UI** — The raw JSON transmission block is stripped from the displayed chat response; only the narrative text and rendered table are shown
+
 ---
 
 ## Dependencies
@@ -162,10 +170,6 @@ This version fully rebuilds the AI query capability from scratch:
 - Tableau MCP Server is downloaded automatically via `npx` on first startup; internet access is required
 - The `.env` file contains sensitive credentials — it is excluded via `.gitignore` and **must not be committed**
 - Query accuracy depends on the quality of your datasource metadata and how clearly fields are named
-
-一个 Tableau Dashboard Extension，让你用自然语言直接查询 Tableau 数据源。
-
-把问题、OpenAPI 说明、MCP tool 描述和当前 dashboard datasource metadata 一起交给 Gemini，让它像 Claude 那样自行规划并查询。
 
 ---
 
@@ -302,6 +306,14 @@ Gemini1/
 - **多 DATA 块解析**：支持 Gemini 在一次回答中返回多组 `[DATA]...[/DATA]`，合并后渲染到表格
 - **执行轨迹可视化**：前端展示每次工具调用的名称、参数、状态和数据行数
 - **异常恢复机制**：`MALFORMED_FUNCTION_CALL` 自动重试（携带原始问题）、空响应兜底 prompt、MCP 连接失败自动重连
+
+### 最新更新
+
+- **`execute-code` 虚拟工具**：Gemini 可以编写 JavaScript 在服务端（Node.js `vm` 沙箱）直接处理查询结果，解决大数据量下 LLM 上下文不足的问题，支持集合求交、连续年份分析等跨查询复杂运算
+- **`queryStore` 数据持久化**：`query-datasource` 和 `execute-code` 的结果均以 `dataset_1`、`dataset_2`... 为键存储在服务端，沙箱执行时可引用任意历史数据集，支持多步链式计算
+- **工具响应截断**：每次查询结果只向 Gemini 回传 3 行样本 + 元数据（完整数据留在 `queryStore`），有效避免大数据集触发 429/503 限流
+- **智能最终数据选择**：输出优先使用 `execute-code` 的处理结果而非原始查询数据，确保表格展示的是正确的筛选/聚合结果
+- **`[DATA]` 块从 UI 中隐藏**：原始 JSON 传输块在渲染前从聊天文本中剔除，用户界面只展示自然语言说明和渲染后的数据表格
 
 ---
 
