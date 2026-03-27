@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { platform } from 'os';
+import vm from 'vm';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -86,9 +87,54 @@ function cleanSchema(schema) {
     return next;
 }
 
+// execute-code 虚拟工具定义（不走 MCP，服务端本地执行）
+function buildExecuteCodeTool() {
+    return {
+        name: 'execute-code',
+        description: [
+            'Execute JavaScript code to process previously queried data.',
+            'USE THIS TOOL when: (1) a query returns more than 200 rows, (2) you need to join/intersect/filter across multiple query results, (3) you need computed metrics like ratios or deltas across datasets.',
+            'Each query-datasource result includes a "datasetKey" field (e.g. "dataset_1") in its response — use datasets["dataset_1"] to access it in code.',
+            'The code must return a value. Arrays of objects are preferred for tabular output.',
+            'Example: datasets["dataset_1"].filter(r => r["利润"] > 0 && r["利润率"] > 0.1)'
+        ].join(' '),
+        inputSchema: {
+            type: 'object',
+            properties: {
+                code: {
+                    type: 'string',
+                    description: 'JavaScript expression or function body. Access all stored query results via the `datasets` object (keyed by datasetKey). Must return a value.'
+                },
+                description: {
+                    type: 'string',
+                    description: 'One-line description of what this code does.'
+                }
+            },
+            required: ['code']
+        }
+    };
+}
+
+// vm 沙箱执行：code 中可访问 datasets，5秒超时
+function executeCodeSandbox(code, datasets, timeoutMs = 5000) {
+    const sandbox = vm.createContext({
+        datasets,
+        result: undefined,
+        console: { log: () => {}, warn: () => {}, error: () => {} }
+    });
+    const wrapped = `result = (function(datasets) {\n${code}\n})(datasets);`;
+    try {
+        vm.runInContext(wrapped, sandbox, { timeout: timeoutMs });
+        return { ok: true, result: sandbox.result };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+}
+
 function convertToGeminiTools(mcpTools) {
+    const allTools = [buildExecuteCodeTool(), ...mcpTools];
     return [{
-        functionDeclarations: mcpTools.map((tool) => ({
+        functionDeclarations: allTools.map((tool) => ({
             name: tool.name,
             description: tool.description,
             parameters: cleanSchema(tool.inputSchema)
@@ -436,6 +482,16 @@ function buildSystemInstruction() {
         '  - Example: if you queried 2024 profit and 2025 profit separately, your [DATA] should contain rows with columns for both years and the delta, like: [{"Category": "Technology", "2024利润": 10156, "2025利润": 7288, "变化": -2868}]',
         '  - The [DATA] block should mirror what you present in your text analysis, so the user can export the complete comparison as CSV.',
         '',
+        'DATA PROCESSING WITH execute-code:',
+        'When a query returns >200 rows, or when you need to join/intersect/filter multiple query results, use the execute-code tool instead of reasoning in your head.',
+        '  - Every query-datasource response includes a "datasetKey" (e.g. "dataset_1") and "rowCount".',
+        '  - Reference data in code via: datasets["dataset_1"]',
+        '  - Example for cross-year intersection:',
+        '      const m2023 = new Map(datasets["dataset_1"].map(r => [r["Product Name"], r]));',
+        '      return datasets["dataset_2"].filter(r => m2023.has(r["Product Name"]) && r["利润率"] > 0.1);',
+        '  - After execute-code returns, use the result to write your final answer and [DATA] block.',
+        '  - Do NOT attempt to filter or intersect large datasets mentally — always delegate to execute-code.',
+        '',
         'STRATEGY FOR TOP-N PER GROUP QUERIES:',
         'When the user asks for "top N per group" (e.g., top 10 products per year per segment):',
         '  - The TOP filter applies globally across the entire result set, NOT per group.',
@@ -554,8 +610,11 @@ app.post('/api/chat', async (req, res) => {
         const audit = [];
         let lastQueryData = [];
         let turnCount = 0;
-
         let malformedRetries = 0;
+
+        // 跨查询数据存储：key -> array of rows
+        const queryStore = new Map();
+        let queryStoreCounter = 0;
 
         while (turnCount < 12) {
             // 检测 MALFORMED_FUNCTION_CALL
@@ -600,18 +659,47 @@ app.post('/api/chat', async (req, res) => {
                 console.log(`  → 调用: ${call.name}`);
                 console.log(`    参数: ${JSON.stringify(call.args ?? call.arguments ?? {}, null, 2)}`);
 
-                const { mcpResult, parsedResponse } = await executeMcpCall(call);
-                const isError = Boolean(mcpResult?.isError);
+                let parsedResponse;
+                let isError = false;
 
-                const resultPreview = JSON.stringify(parsedResponse).slice(0, 300);
-                console.log(`    结果: ${isError ? '❌ ERROR' : '✅ OK'} | ${resultPreview}${resultPreview.length >= 300 ? '...(truncated)' : ''}`);
+                if (call.name === 'execute-code') {
+                    // 本地沙箱执行，不走 MCP
+                    const { code, description } = call.args ?? {};
+                    const datasets = Object.fromEntries(queryStore);
+                    console.log(`    [execute-code] ${description || ''} | datasets: [${[...queryStore.keys()].join(', ')}]`);
+                    const execResult = executeCodeSandbox(code, datasets);
+                    if (execResult.ok) {
+                        const rows = Array.isArray(execResult.result) ? execResult.result : [{ result: String(execResult.result) }];
+                        parsedResponse = { data: rows, rowCount: rows.length };
+                        lastQueryData = rows;
+                        console.log(`    结果: ✅ OK | ${rows.length} 行`);
+                    } else {
+                        isError = true;
+                        parsedResponse = { error: execResult.error };
+                        console.log(`    结果: ❌ ERROR | ${execResult.error}`);
+                    }
+                } else {
+                    // 普通 MCP 调用
+                    const { mcpResult, parsedResponse: pr } = await executeMcpCall(call);
+                    parsedResponse = pr;
+                    isError = Boolean(mcpResult?.isError);
+
+                    const resultPreview = JSON.stringify(parsedResponse).slice(0, 300);
+                    console.log(`    结果: ${isError ? '❌ ERROR' : '✅ OK'} | ${resultPreview}${resultPreview.length >= 300 ? '...(truncated)' : ''}`);
+
+                    // query-datasource 成功时存入 queryStore，附加 datasetKey 给 Gemini
+                    if (call.name === 'query-datasource' && !isError && Array.isArray(parsedResponse?.data)) {
+                        queryStoreCounter++;
+                        const datasetKey = `dataset_${queryStoreCounter}`;
+                        queryStore.set(datasetKey, parsedResponse.data);
+                        parsedResponse.datasetKey = datasetKey;
+                        parsedResponse.rowCount = parsedResponse.data.length;
+                        lastQueryData = parsedResponse.data;
+                        console.log(`    数据行数: ${parsedResponse.data.length} → 存储为 ${datasetKey}`);
+                    }
+                }
 
                 audit.push(buildAuditEntry(call, parsedResponse, isError));
-
-                if (call.name === 'query-datasource' && Array.isArray(parsedResponse?.data)) {
-                    lastQueryData = parsedResponse.data;
-                    console.log(`    数据行数: ${parsedResponse.data.length}`);
-                }
 
                 toolResults.push({
                     functionResponse: {
